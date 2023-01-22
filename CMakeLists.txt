@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.6)
 project(Runnable VERSION 0.1.0)
 enable_language (Fortran)
 
-set(CMAKE_Fortran_COMPILER "/usr/bin/gfortran-11")
+# set(CMAKE_Fortran_COMPILER "/usr/bin/gfortran-11")
 set (CMAKE_Fortran_FLAGS_RELEASE "-Ofast -flto -fmax-stack-var-size=65536")
 set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fbounds-check -fmax-stack-var-size=65536")
 # set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fsanitize=address")
