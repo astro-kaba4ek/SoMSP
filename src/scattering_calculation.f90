@@ -83,11 +83,18 @@ contains
         solution_te = 0
         if (LOG_INFO) write(LOG_FD,*) '{INFO} start calculation with model '//model
 
+        ! циганские фокусы объявляются открытыми
         call MPI_Init(Err)
         call MPI_Comm_rank(MPI_COMM_WORLD, Rank, Err)
         call MPI_Comm_size(MPI_COMM_WORLD, Mpi_size, Err)
 
-        do m = minm, maxm
+        ! m начинается с 0 (0, 1, 2), потоков на 1 больше (4)
+        ! do m = minm, maxm
+        ! if (Rank == m+1) then
+        ! по хорошему надо бы собрать массив для эмок.., чтобы не только с 0, ну да лан
+        if (Rank /= 0) then
+            m = Rank - 1
+
             call typed_model%build_mode_queue(m, lnum, spherical_lnum, queue)
             if (LOG_INFO) write(LOG_FD,*) 
             qlen = size(queue)
@@ -98,36 +105,54 @@ contains
 
             accuracy = 0
             mode_res = calculate_m(scattering_context, queue, m, lnum, sph_lnum)
+            
+            ! отправка mode_res в 0 поток
+            ! а именно, массивы mode_resЫ, queueЫ, qlenЫ
 
+        elseif (Rank == 0) then    
+            
+            ! принять массивы из остальных потоков 
+
+            ! добавить внешний цикл по элементам qlenЫ-queueЫ
+            ! +собрать массив accuracyЫ
             do i = 1, qlen
                 if (queue(i)%to_res) then
                     accuracy = max(accuracy, res%update_and_get_accuracy(queue(i)%info, mode_res(i)%factors))
                 endif
             enddo
 
-            call typed_model%print_mode_row(m, mode_res)
+            ! ! из этого тоже цикл по элементам mode_resЫ (добавить чтобы печатало 
+            ! ! только до тех элементов из accuracyЫ, до которых имеет смысл)
+            ! call typed_model%print_mode_row(m, mode_res)
 
             if (need_indicatrix) then
-                solutions = typed_model%solution_places(m)
-                do i = 1, size(solutions)
-                    dim = size(mode_res(solutions(i)%source_tm)%solution)
-                    solution_tm(:dim,solutions(i)%m) = mode_res(solutions(i)%source_tm)%solution
-                    solution_te(:dim,solutions(i)%m) = mode_res(solutions(i)%source_te)%solution
-                    basis_types(solutions(i)%m) = solutions(i)%basis_type
+                ! и из этого по элементам mode_resЫ-accuracyЫ
+                    solutions = typed_model%solution_places(m)
+                    do i = 1, size(solutions)
+                        dim = size(mode_res(solutions(i)%source_tm)%solution)
+                        solution_tm(:dim,solutions(i)%m) = mode_res(solutions(i)%source_tm)%solution
+                        solution_te(:dim,solutions(i)%m) = mode_res(solutions(i)%source_te)%solution
+                        basis_types(solutions(i)%m) = solutions(i)%basis_type
 
-                update = calculate_amplitude_matrix_m(solutions(i)%basis_type, scattering_context, solutions(i)%m, lnum, &
-                theta_bucket_size, scattering_context%directions%thetas(theta_bucket_start:theta_bucket_end), &
-                nphi, scattering_context%directions%phis, &
-                direction_calculation, mode_res(solutions(i)%source_te)%solution, mode_res(solutions(i)%source_tm)%solution)
-                accuracy = max(accuracy, update_amplitude_and_get_accuracy(ampl, update, ntheta, nphi))
-                enddo
+                        update = calculate_amplitude_matrix_m(solutions(i)%basis_type, scattering_context, solutions(i)%m, lnum, &
+                        theta_bucket_size, scattering_context%directions%thetas(theta_bucket_start:theta_bucket_end), &
+                        nphi, scattering_context%directions%phis, &
+                        direction_calculation, mode_res(solutions(i)%source_te)%solution, mode_res(solutions(i)%source_tm)%solution)
+                        accuracy = max(accuracy, update_amplitude_and_get_accuracy(ampl, update, ntheta, nphi))
+                    enddo
 
             endif
 
-            if (size(queue) > 0 .and. accuracy < MIN_M_RATIO) then
-                real_maxm = m
-                exit
-            endif
+            ! из этого тоже цикл по элементам mode_resЫ (добавить чтобы печатало 
+            ! только до тех элементов из accuracyЫ, до которых имеет смысл, 
+            ! то есть поместить нижележащую проверку на точность сюда. код был передвинут 
+            ! сюда как раз для корректронсти этой проверки)
+            call typed_model%print_mode_row(m, mode_res)
+
+            ! if (size(queue) > 0 .and. accuracy < MIN_M_RATIO) then
+            !     real_maxm = m
+            !     exit
+            ! endif
         end do
         deallocate(queue, mode_res)
 
