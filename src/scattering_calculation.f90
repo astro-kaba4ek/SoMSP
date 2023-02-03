@@ -82,6 +82,11 @@ contains
         solution_tm = 0
         solution_te = 0
         if (LOG_INFO) write(LOG_FD,*) '{INFO} start calculation with model '//model
+
+        call MPI_Init(Err)
+        call MPI_Comm_rank(MPI_COMM_WORLD, Rank, Err)
+        call MPI_Comm_size(MPI_COMM_WORLD, Mpi_size, Err)
+
         do m = minm, maxm
             call typed_model%build_mode_queue(m, lnum, spherical_lnum, queue)
             if (LOG_INFO) write(LOG_FD,*) 
@@ -125,6 +130,8 @@ contains
             endif
         end do
         deallocate(queue, mode_res)
+
+        call MPI_Finalize(Err)
 
         if (.not. need_indicatrix) then
             return
