@@ -45,6 +45,11 @@ contains
 
         integer :: theta_bucket_size, theta_bucket_start, theta_bucket_end, current_size, current_end
 
+        ! предциганские фокусы
+        type(MPI_Datatype) :: Info_MPI, Item_MPI, Previous_MPI, Node_MPI
+        integer(kind = MPI_ADDRESS_KIND) :: displs(6) ! можно ли просто integer сделать (?)
+
+
         call res%initialize()
 
         99 format('#',1A5,' ', 1A12,' ',6A24)
@@ -109,7 +114,42 @@ contains
             ! отправка mode_res в 0 поток
             ! а именно, массивы mode_resЫ, queueЫ, qlenЫ
 
-        elseif (Rank == 0) then    
+            ! рассматриваем Node1 = queue(1), а потом сделать цикл
+            ! ФОКУСЫ_MPI:
+            ! подструктура Info (-- часть Node)
+            call MPI_Type_contiguous(4, MPI_INTEGER, Info_MPI, Err)
+            call MPI_Type_commit(Info_MPI, Err)
+
+            ! подструктура Item (-- часть Node)
+            call MPI_Type_contiguous(2, MPI_INTEGER, Item_MPI, Err)
+            call MPI_Type_commit(Item_MPI, Err)
+
+            ! подмассив Previous (-- часть Node)
+            call MPI_Type_contiguous(size(queue(1)%previous), MPI_INTEGER, Previous_MPI, Err)
+            call MPI_Type_commit(Previous_MPI, Err)
+
+            ! сделать из этого цикл (?)
+            call MPI_Get_address(queue(1), displs(1), Err)
+            call MPI_Get_address(queue(1)%item, displs(2), Err)
+            call MPI_Get_address(queue(1)%previous, displs(3), Err)
+            call MPI_Get_address(queue(1)%need_calc, displs(4), Err)
+            call MPI_Get_address(queue(1)%to_res, displs(5), Err)
+            call MPI_Get_address(size(queue(1)), displs(6), Err)
+
+            ! структура Node1 (5 полей)
+            call MPI_Type_create_struct(6, [(1,i=1,6)], displs, &
+                [Info_MPI, Item_MPI, Previous_MPI, MPI_LOGICAL, MPI_LOGICAL, MPI_UB], Node_MPI, Err)
+            call MPI_Type_commit(Node_MPI, Err)
+
+            call MPI_Send(queue(1), 1, Node_MPI, 0, Rank, MPI_COMM_WORLD, Err)
+
+            call MPI_Type_free(Info_MPI, Err)
+            call MPI_Type_free(Item_MPI, Err)
+            call MPI_Type_free(Previous_MPI, Err)
+            call MPI_Type_free(Node_MPI, Err)
+
+        else!if (Rank == 0) then
+
             
             ! принять массивы из остальных потоков 
 
