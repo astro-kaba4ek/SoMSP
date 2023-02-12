@@ -2,7 +2,7 @@
 !  like size of matrices and number of legendre coefficients
 module constants
     use regime
-    use :: mpi
+    use :: mpi_f08
 
     implicit none
 

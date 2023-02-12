@@ -47,7 +47,9 @@ contains
 
         ! предциганские фокусы
         type(MPI_Datatype) :: Info_MPI, Item_MPI, Previous_MPI, Node_MPI
-        integer(kind = MPI_ADDRESS_KIND) :: displs(6) ! можно ли просто integer сделать (?)
+        ! integer :: Info_MPI, Item_MPI, Previous_MPI, Node_MPI
+        integer(MPI_ADDRESS_KIND) :: displs(6), displs1(4), displs2(3) ! можно ли просто integer сделать (?)
+        type(Node) :: Node1
 
 
         call res%initialize()
@@ -93,6 +95,9 @@ contains
         call MPI_Comm_rank(MPI_COMM_WORLD, Rank, Err)
         call MPI_Comm_size(MPI_COMM_WORLD, Mpi_size, Err)
 
+
+
+
         ! m начинается с 0 (0, 1, 2), потоков на 1 больше (4)
         ! do m = minm, maxm
         ! if (Rank == m+1) then
@@ -104,7 +109,7 @@ contains
             if (LOG_INFO) write(LOG_FD,*) 
             qlen = size(queue)
             if (qlen == 0) then
-                cycle
+                ! cycle
             endif
             call log_node_queue(queue)
 
@@ -120,37 +125,124 @@ contains
             call MPI_Type_contiguous(4, MPI_INTEGER, Info_MPI, Err)
             call MPI_Type_commit(Info_MPI, Err)
 
+            ! проблема в MPI_address.....
+
+            ! call MPI_get_address(queue(1)%info%basis, displs1(1), Err)
+            ! call MPI_get_address(queue(1)%info%tmode, displs1(2), Err)
+            ! call MPI_get_address(queue(1)%info%basis_type, displs1(3), Err)
+            ! call MPI_get_address(queue(1)%info%num, displs1(4), Err)
+            ! ! call MPI_TYPE_get_EXTENT(queue(1)%info, displs1(5), Err)
+
+            ! call MPI_Type_create_struct(4, [(1,i=1,4)], displs1, &
+            !     [MPI_INTEGER, MPI_INTEGER, MPI_INTEGER, MPI_INTEGER], Info_MPI, Err)
+            ! call MPI_Type_commit(Info_MPI, Err)
+
+            call MPI_Send([queue(1)%info%basis, queue(1)%info%tmode, queue(1)%info%basis_type, queue(1)%info%num],&
+             1, Info_MPI, 0, Rank, MPI_COMM_WORLD, Err)
+            call MPI_Send(queue(1)%info%basis, 1, MPI_INTEGER, 0, Rank, MPI_COMM_WORLD, Err)
+
+            
             ! подструктура Item (-- часть Node)
             call MPI_Type_contiguous(2, MPI_INTEGER, Item_MPI, Err)
             call MPI_Type_commit(Item_MPI, Err)
+
+
+            ! call MPI_address(queue(1)%item, displs2(1), Err)
+            ! call MPI_address(queue(1)%item%lnum, displs2(2), Err)
+            ! call MPI_TYPE_EXTENT(queue(1)%item, displs2(3), Err)
+
+            ! call MPI_Type_create_struct(3, [(1,i=1,3)], displs2, &
+            !     [MPI_INTEGER, MPI_INTEGER, MPI_UB], Item_MPI, Err)
 
             ! подмассив Previous (-- часть Node)
             call MPI_Type_contiguous(size(queue(1)%previous), MPI_INTEGER, Previous_MPI, Err)
             call MPI_Type_commit(Previous_MPI, Err)
 
+
             ! сделать из этого цикл (?)
-            call MPI_Get_address(queue(1), displs(1), Err)
-            call MPI_Get_address(queue(1)%item, displs(2), Err)
-            call MPI_Get_address(queue(1)%previous, displs(3), Err)
-            call MPI_Get_address(queue(1)%need_calc, displs(4), Err)
-            call MPI_Get_address(queue(1)%to_res, displs(5), Err)
-            call MPI_Get_address(size(queue(1)), displs(6), Err)
+            ! call MPI_address(queue(1), displs(1), Err)
+            ! call MPI_address(queue(1)%item, displs(2), Err)
+            ! call MPI_address(queue(1)%previous, displs(3), Err)
+            ! call MPI_address(queue(1)%need_calc, displs(4), Err)
+            ! call MPI_address(queue(1)%to_res, displs(5), Err)
+            ! call MPI_TYPE_EXTENT(queue(1), displs(6), Err)
 
-            ! структура Node1 (5 полей)
-            call MPI_Type_create_struct(6, [(1,i=1,6)], displs, &
-                [Info_MPI, Item_MPI, Previous_MPI, MPI_LOGICAL, MPI_LOGICAL, MPI_UB], Node_MPI, Err)
-            call MPI_Type_commit(Node_MPI, Err)
+            ! ! структура Node1 (5 полей)
+            ! call MPI_Type_create_struct(6, [(1,i=1,6)], displs, &
+            !     [Info_MPI, Item_MPI, Previous_MPI, MPI_LOGICAL, MPI_LOGICAL, MPI_UB], Node_MPI, Err)
+            ! ! call MPI_Type_create_struct(5, [(1,i=1,5)], displs, &
+            ! !     [Info_MPI, Item_MPI, Previous_MPI, MPI_LOGICAL, MPI_LOGICAL], Node_MPI, Err)
+            ! call MPI_Type_commit(Node_MPI, Err)
 
-            call MPI_Send(queue(1), 1, Node_MPI, 0, Rank, MPI_COMM_WORLD, Err)
+            ! call MPI_Send(queue(1), 1, Node_MPI, 0, Rank, MPI_COMM_WORLD, Err)
 
             call MPI_Type_free(Info_MPI, Err)
             call MPI_Type_free(Item_MPI, Err)
             call MPI_Type_free(Previous_MPI, Err)
             call MPI_Type_free(Node_MPI, Err)
 
-        else!if (Rank == 0) then
+            print*, queue(1)%info%to_string()
+            print*, queue(1)%item%to_string()
+            print*, queue(1)%previous
+            print*, queue(1)%need_calc
+            print*, queue(1)%to_res
 
-            
+
+        else!if (Rank == 0) then
+            call MPI_get_address(queue(1)%info%basis, displs1(1), Err)
+            call MPI_get_address(queue(1)%info%tmode, displs1(2), Err)
+            call MPI_get_address(queue(1)%info%basis_type, displs1(3), Err)
+            call MPI_get_address(queue(1)%info%num, displs1(4), Err)
+            ! call MPI_TYPE_get_EXTENT(queue(1)%info, displs1(5), Err)
+
+            call MPI_Type_create_struct(4, [(1,i=1,4)], displs1, &
+                [MPI_INTEGER, MPI_INTEGER, MPI_INTEGER, MPI_INTEGER], Info_MPI, Err)
+            call MPI_Type_commit(Info_MPI, Err)
+
+            ! call MPI_Send(queue(1)%info, 1, Info_MPI, 0, Rank, MPI_COMM_WORLD, Err)
+            call MPI_Recv(Node1%info, 1, Info_MPI, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err)
+
+
+            ! call MPI_Type_contiguous(4, MPI_INTEGER, Info_MPI, Err)
+            ! call MPI_Type_commit(Info_MPI, Err)
+
+            ! ! подструктура Item (-- часть Node)
+            ! call MPI_Type_contiguous(2, MPI_INTEGER, Item_MPI, Err)
+            ! call MPI_Type_commit(Item_MPI, Err)
+
+            ! ! подмассив Previous (-- часть Node)
+            ! call MPI_Type_contiguous(size(queue(1)%previous), MPI_INTEGER, Previous_MPI, Err)
+            ! call MPI_Type_commit(Previous_MPI, Err)
+
+            ! ! сделать из этого цикл (?)
+            ! call MPI_address(queue(1), displs(1), Err)
+            ! call MPI_address(queue(1)%item, displs(2), Err)
+            ! call MPI_address(queue(1)%previous, displs(3), Err)
+            ! call MPI_address(queue(1)%need_calc, displs(4), Err)
+            ! call MPI_address(queue(1)%to_res, displs(5), Err)
+            ! call MPI_TYPE_EXTENT(queue(1), displs(6), Err)
+
+            ! структура Node1 (5 полей)
+            call MPI_Type_create_struct(6, [(1,i=1,6)], displs, &
+                [Info_MPI, Item_MPI, Previous_MPI, MPI_LOGICAL, MPI_LOGICAL, MPI_UB], Node_MPI, Err)
+            call MPI_Type_commit(Node_MPI, Err)
+
+            ! call MPI_Send(queue(1), 1, Node_MPI, 0, Rank, MPI_COMM_WORLD, Err)
+            ! call MPI_Recv(Node1, 1, Node_MPI, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err)
+
+            call MPI_Type_free(Info_MPI, Err)
+            ! call MPI_Type_free(Item_MPI, Err)
+            ! call MPI_Type_free(Previous_MPI, Err)
+            call MPI_Type_free(Node_MPI, Err)
+
+            print*, "-------------------------------"
+            print*, Node1%info%to_string()
+            print*, Node1%item%to_string()
+            print*, Node1%previous
+            print*, Node1%need_calc
+            print*, Node1%to_res
+
+
             ! принять массивы из остальных потоков 
 
             ! добавить внешний цикл по элементам qlenЫ-queueЫ
@@ -193,7 +285,8 @@ contains
             !     real_maxm = m
             !     exit
             ! endif
-        end do
+        ! end do
+        end if
         deallocate(queue, mode_res)
 
         call MPI_Finalize(Err)
