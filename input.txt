@@ -7,8 +7,8 @@
 50                                              alpha (degrees)
 30                                              lnum, if =0 then value 2PIa/lambda is used
 0                                               spherical_lnum, if =0 then =lnum
-0                                               minm
-2                                              maxm
+11                                               minm
+11                                              maxm
 uv_pq_te_from_tm                                one of: compare_uv_pq, compare_te, all_uv, uv_pq, uv_pq_te_from_tm
 37 0.0 180.0                                    ntheta theta0 theta1 betwee 0 and 360
 1 0.0 0.0                                       nphi phi0 phi1 between 0 and 180

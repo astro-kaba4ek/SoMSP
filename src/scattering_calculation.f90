@@ -50,6 +50,9 @@ contains
         ! integer :: Info_MPI, Item_MPI, Previous_MPI, Node_MPI
         integer(MPI_ADDRESS_KIND) :: displs(6), displs1(4), displs2(3) ! можно ли просто integer сделать (?)
         type(Node) :: Node1
+        logical, allocatable :: node_logic(:)
+        integer, allocatable :: node_int(:), node_prev(:)
+        integer :: sum_size, s
 
 
         call res%initialize()
@@ -108,6 +111,8 @@ contains
             call typed_model%build_mode_queue(m, lnum, spherical_lnum, queue)
             if (LOG_INFO) write(LOG_FD,*) 
             qlen = size(queue)
+            print*, "sum_size2", qlen
+            
             if (qlen == 0) then
                 ! cycle
             endif
@@ -116,14 +121,37 @@ contains
             accuracy = 0
             mode_res = calculate_m(scattering_context, queue, m, lnum, sph_lnum)
             
+            print*, "lol"
+            ! print*, queue(1)%info%to_string()
+            ! print*, queue(1)%item%to_string()
+            ! print*, queue(1)%previous
+            ! print*, queue(1)%need_calc
+            ! print*, queue(1)%to_res
+
             ! отправка mode_res в 0 поток
             ! а именно, массивы mode_resЫ, queueЫ, qlenЫ
+
+            allocate(node_logic(2*qlen))
+            node_logic = [(queue(i)%need_calc, i = 1, qlen), (queue(i)%to_res, i = 1, qlen)]
+            call MPI_Ssend(node_logic, 2*qlen, MPI_LOGICAL, 0, Rank, MPI_COMM_WORLD, Err)
+            deallocate(node_logic)
+
+            allocate(node_int((2+4)*qlen))
+            node_int = [integer::]
+            do i = 1, qlen
+                node_int = [node_int, queue(i)%info%basis, queue(i)%info%tmode, queue(i)%info%basis_type, queue(i)%info%num]
+                node_int = [node_int, queue(i)%item%m, queue(i)%item%lnum]
+            end do
+            call MPI_Ssend(node_int, (2+4)*qlen, MPI_INTEGER, 0, Rank, MPI_COMM_WORLD, Err)
+            deallocate(node_int)
+
+            deallocate(queue, mode_res)
 
             ! рассматриваем Node1 = queue(1), а потом сделать цикл
             ! ФОКУСЫ_MPI:
             ! подструктура Info (-- часть Node)
-            call MPI_Type_contiguous(4, MPI_INTEGER, Info_MPI, Err)
-            call MPI_Type_commit(Info_MPI, Err)
+            ! call MPI_Type_contiguous(4, MPI_INTEGER, Info_MPI, Err)
+            ! call MPI_Type_commit(Info_MPI, Err)
 
             ! проблема в MPI_address.....
 
@@ -137,14 +165,10 @@ contains
             !     [MPI_INTEGER, MPI_INTEGER, MPI_INTEGER, MPI_INTEGER], Info_MPI, Err)
             ! call MPI_Type_commit(Info_MPI, Err)
 
-            call MPI_Send([queue(1)%info%basis, queue(1)%info%tmode, queue(1)%info%basis_type, queue(1)%info%num],&
-             1, Info_MPI, 0, Rank, MPI_COMM_WORLD, Err)
-            call MPI_Send(queue(1)%info%basis, 1, MPI_INTEGER, 0, Rank, MPI_COMM_WORLD, Err)
-
             
             ! подструктура Item (-- часть Node)
-            call MPI_Type_contiguous(2, MPI_INTEGER, Item_MPI, Err)
-            call MPI_Type_commit(Item_MPI, Err)
+            ! call MPI_Type_contiguous(2, MPI_INTEGER, Item_MPI, Err)
+            ! call MPI_Type_commit(Item_MPI, Err)
 
 
             ! call MPI_address(queue(1)%item, displs2(1), Err)
@@ -155,8 +179,21 @@ contains
             !     [MPI_INTEGER, MPI_INTEGER, MPI_UB], Item_MPI, Err)
 
             ! подмассив Previous (-- часть Node)
-            call MPI_Type_contiguous(size(queue(1)%previous), MPI_INTEGER, Previous_MPI, Err)
-            call MPI_Type_commit(Previous_MPI, Err)
+
+
+            sum_size = qlen
+            print*, "sum_size1", qlen
+
+            do i = 1, qlen
+                sum_size = sum_size + size(queue(i)%previous)
+            end do
+            allocate(node_prev(sum_size))
+            node_prev = [integer::]
+            do i = 1, qlen
+                node_prev = [node_prev, size(queue(i)%previous), queue(i)%previous]
+            end do
+            call MPI_Ssend(node_prev, sum_size, MPI_INTEGER, 0, Rank, MPI_COMM_WORLD, Err)
+            deallocate(node_prev)
 
 
             ! сделать из этого цикл (?)
@@ -176,71 +213,70 @@ contains
 
             ! call MPI_Send(queue(1), 1, Node_MPI, 0, Rank, MPI_COMM_WORLD, Err)
 
-            call MPI_Type_free(Info_MPI, Err)
-            call MPI_Type_free(Item_MPI, Err)
-            call MPI_Type_free(Previous_MPI, Err)
-            call MPI_Type_free(Node_MPI, Err)
-
-            print*, queue(1)%info%to_string()
-            print*, queue(1)%item%to_string()
-            print*, queue(1)%previous
-            print*, queue(1)%need_calc
-            print*, queue(1)%to_res
-
-
-        else!if (Rank == 0) then
-            call MPI_get_address(queue(1)%info%basis, displs1(1), Err)
-            call MPI_get_address(queue(1)%info%tmode, displs1(2), Err)
-            call MPI_get_address(queue(1)%info%basis_type, displs1(3), Err)
-            call MPI_get_address(queue(1)%info%num, displs1(4), Err)
-            ! call MPI_TYPE_get_EXTENT(queue(1)%info, displs1(5), Err)
-
-            call MPI_Type_create_struct(4, [(1,i=1,4)], displs1, &
-                [MPI_INTEGER, MPI_INTEGER, MPI_INTEGER, MPI_INTEGER], Info_MPI, Err)
-            call MPI_Type_commit(Info_MPI, Err)
-
-            ! call MPI_Send(queue(1)%info, 1, Info_MPI, 0, Rank, MPI_COMM_WORLD, Err)
-            call MPI_Recv(Node1%info, 1, Info_MPI, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err)
-
-
-            ! call MPI_Type_contiguous(4, MPI_INTEGER, Info_MPI, Err)
-            ! call MPI_Type_commit(Info_MPI, Err)
-
-            ! ! подструктура Item (-- часть Node)
-            ! call MPI_Type_contiguous(2, MPI_INTEGER, Item_MPI, Err)
-            ! call MPI_Type_commit(Item_MPI, Err)
-
-            ! ! подмассив Previous (-- часть Node)
-            ! call MPI_Type_contiguous(size(queue(1)%previous), MPI_INTEGER, Previous_MPI, Err)
-            ! call MPI_Type_commit(Previous_MPI, Err)
-
-            ! ! сделать из этого цикл (?)
-            ! call MPI_address(queue(1), displs(1), Err)
-            ! call MPI_address(queue(1)%item, displs(2), Err)
-            ! call MPI_address(queue(1)%previous, displs(3), Err)
-            ! call MPI_address(queue(1)%need_calc, displs(4), Err)
-            ! call MPI_address(queue(1)%to_res, displs(5), Err)
-            ! call MPI_TYPE_EXTENT(queue(1), displs(6), Err)
-
-            ! структура Node1 (5 полей)
-            call MPI_Type_create_struct(6, [(1,i=1,6)], displs, &
-                [Info_MPI, Item_MPI, Previous_MPI, MPI_LOGICAL, MPI_LOGICAL, MPI_UB], Node_MPI, Err)
-            call MPI_Type_commit(Node_MPI, Err)
-
-            ! call MPI_Send(queue(1), 1, Node_MPI, 0, Rank, MPI_COMM_WORLD, Err)
-            ! call MPI_Recv(Node1, 1, Node_MPI, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err)
-
-            call MPI_Type_free(Info_MPI, Err)
+            ! call MPI_Type_free(Info_MPI, Err)
             ! call MPI_Type_free(Item_MPI, Err)
             ! call MPI_Type_free(Previous_MPI, Err)
-            call MPI_Type_free(Node_MPI, Err)
+            ! call MPI_Type_free(Node_MPI, Err)
+
+        else!if (Rank == 0) then
+
+            ! принимаем шифрованный queue
+            call MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err) !нужен не энитег, а конкретные
+            call MPI_Get_count(Status, MPI_LOGICAL, qlen, Err)
+
+            qlen = qlen / 2
+
+            allocate(node_logic(2*qlen))
+            call MPI_Recv(node_logic, 2*qlen, MPI_LOGICAL, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err) !нужен не энитег, а конкретные
+
+            allocate(node_int((2+4)*qlen))
+            call MPI_Recv(node_int, (2+4)*qlen, MPI_INTEGER, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err) !нужен не энитег, а конкретные
+
+            call MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err) !нужен не энитег, а конкретные
+            call MPI_Get_count(Status, MPI_INTEGER, sum_size, Err)
+
+            allocate(node_prev(sum_size))
+            call MPI_Recv(node_prev, sum_size, MPI_INTEGER, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err) !нужен не энитег, а конкретные
+
+
+            ! расшифровываем
+            do i = 1, qlen
+                queue(i)%need_calc = node_logic(i)
+                queue(i)%to_res = node_logic(i+qlen)
+
+                queue(i)%info%basis = node_int(6*(i-1)+1)
+                queue(i)%info%tmode = node_int(6*(i-1)+2)
+                queue(i)%info%basis_type = node_int(6*(i-1)+3)
+                queue(i)%info%num = node_int(6*(i-1)+4)
+
+                queue(i)%item%m = node_int(6*(i-1)+5)
+                queue(i)%item%lnum = node_int(6*(i-1)+6)
+            end do
+            
+            i = 1; s = 0
+            print*, "sum_size", sum_size
+            do while (i <= sum_size)
+                s = node_prev(i)
+                ! allocate(node_pqueue(i)%previous(s))
+
+                queue(i)%previous = node_prev(i+1:i+s)
+                print*, i,"a", node_prev(i+1:i+s)
+                print*, i,"b", queue(i)%previous
+
+                i = i + s + 1
+            end do
+
+            deallocate(node_prev, node_logic, node_int)
+
+
+
 
             print*, "-------------------------------"
-            print*, Node1%info%to_string()
-            print*, Node1%item%to_string()
-            print*, Node1%previous
-            print*, Node1%need_calc
-            print*, Node1%to_res
+            ! print*, Node1%info%to_string()
+            ! print*, Node1%item%to_string()
+            ! print*, Node1%previous
+            ! print*, Node1%need_calc
+            ! print*, Node1%to_res
 
 
             ! принять массивы из остальных потоков 
@@ -286,10 +322,13 @@ contains
             !     exit
             ! endif
         ! end do
-        end if
         deallocate(queue, mode_res)
 
+        end if
+
         call MPI_Finalize(Err)
+        ! deallocate(queue, mode_res)
+
 
         if (.not. need_indicatrix) then
             return
