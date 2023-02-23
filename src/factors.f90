@@ -34,9 +34,18 @@ program factors
             call assert(.false., 'unknown parameter '//trim(arg))
         endif
     enddo
+    
+    ! циганские фокусы объявляются открытыми
+    call MPI_Init(Err)
+    call MPI_Comm_rank(MPI_COMM_WORLD, Rank, Err)
+    call MPI_Comm_size(MPI_COMM_WORLD, Mpi_size, Err)
 
+    ! if (Rank == 0) then
     call read_input(input_file, f, nol, rv, xv, ab, alpha, lambda, ri, matrix_size, spherical_lnum, minm, maxm, model, &
     ntheta, theta0, theta1, nphi, phi0, phi1)
+    ! end if
+
+    ! call MPI_Barrier(MPI_COMM_WORLD, Err)
 
     call global_context%initialize(f, nol, xv, ab, alpha, lambda, ri, matrix_size, spherical_lnum, minm, maxm, &
     ntheta, theta0, theta1, nphi, phi0, phi1)
@@ -52,4 +61,9 @@ program factors
 
     deallocate(rv, xv, ab, ri)
     if (LOG_INFO) close(LOG_FD)
+
+
+
+    call MPI_Finalize(Err)
+
 end program factors

@@ -51,9 +51,9 @@ contains
         integer(MPI_ADDRESS_KIND) :: displs(6), displs1(4), displs2(3) ! можно ли просто integer сделать (?)
         type(Node) :: Node1
         logical, allocatable :: node_logic(:)
-        integer, allocatable :: node_int(:), node_prev(:)
-        integer :: sum_size, s
-
+        integer, allocatable :: node_int(:), node_prev(:), m_array(:), nodes_previous(:,:), jj(:)
+        integer :: sum_size, s, c
+        type(ModeInfo) :: node_info
 
         call res%initialize()
 
@@ -93,26 +93,26 @@ contains
         solution_te = 0
         if (LOG_INFO) write(LOG_FD,*) '{INFO} start calculation with model '//model
 
-        ! циганские фокусы объявляются открытыми
-        call MPI_Init(Err)
-        call MPI_Comm_rank(MPI_COMM_WORLD, Rank, Err)
-        call MPI_Comm_size(MPI_COMM_WORLD, Mpi_size, Err)
+        ! ! циганские фокусы объявляются открытыми
+        ! call MPI_Init(Err)
+        ! call MPI_Comm_rank(MPI_COMM_WORLD, Rank, Err)
+        ! call MPI_Comm_size(MPI_COMM_WORLD, Mpi_size, Err)
 
 
-
-
+        allocate(m_array(maxm-minm+1))
+        m_array = [(m, m=minm, maxm)]
         ! m начинается с 0 (0, 1, 2), потоков на 1 больше (4)
         ! do m = minm, maxm
         ! if (Rank == m+1) then
         ! по хорошему надо бы собрать массив для эмок.., чтобы не только с 0, ну да лан
         if (Rank /= 0) then
-            m = Rank - 1
+            ! m = Rank - 1
+            m = m_array(Rank)
 
             call typed_model%build_mode_queue(m, lnum, spherical_lnum, queue)
             if (LOG_INFO) write(LOG_FD,*) 
             qlen = size(queue)
-            print*, "sum_size2", qlen
-            
+            print*, "aa", qlen
             if (qlen == 0) then
                 ! cycle
             endif
@@ -122,11 +122,11 @@ contains
             mode_res = calculate_m(scattering_context, queue, m, lnum, sph_lnum)
             
             print*, "lol"
-            ! print*, queue(1)%info%to_string()
-            ! print*, queue(1)%item%to_string()
-            ! print*, queue(1)%previous
-            ! print*, queue(1)%need_calc
-            ! print*, queue(1)%to_res
+            print*, 1, queue(1)%info%to_string()
+            print*, 1, queue(1)%item%to_string()
+            print*, 1, queue(1)%previous
+            print*, 1, queue(1)%need_calc
+            print*, 1, queue(1)%to_res
 
             ! отправка mode_res в 0 поток
             ! а именно, массивы mode_resЫ, queueЫ, qlenЫ
@@ -145,7 +145,6 @@ contains
             call MPI_Ssend(node_int, (2+4)*qlen, MPI_INTEGER, 0, Rank, MPI_COMM_WORLD, Err)
             deallocate(node_int)
 
-            deallocate(queue, mode_res)
 
             ! рассматриваем Node1 = queue(1), а потом сделать цикл
             ! ФОКУСЫ_MPI:
@@ -182,18 +181,20 @@ contains
 
 
             sum_size = qlen
-            print*, "sum_size1", qlen
 
             do i = 1, qlen
                 sum_size = sum_size + size(queue(i)%previous)
             end do
+
             allocate(node_prev(sum_size))
             node_prev = [integer::]
             do i = 1, qlen
                 node_prev = [node_prev, size(queue(i)%previous), queue(i)%previous]
             end do
+
             call MPI_Ssend(node_prev, sum_size, MPI_INTEGER, 0, Rank, MPI_COMM_WORLD, Err)
             deallocate(node_prev)
+            print*, "kek2"
 
 
             ! сделать из этого цикл (?)
@@ -217,6 +218,7 @@ contains
             ! call MPI_Type_free(Item_MPI, Err)
             ! call MPI_Type_free(Previous_MPI, Err)
             ! call MPI_Type_free(Node_MPI, Err)
+            deallocate(queue, mode_res)
 
         else!if (Rank == 0) then
 
@@ -238,8 +240,38 @@ contains
             allocate(node_prev(sum_size))
             call MPI_Recv(node_prev, sum_size, MPI_INTEGER, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err) !нужен не энитег, а конкретные
 
+          
+            ! nodes_previous
+            ! i = 1; s = 0
+            ! do while (i <= sum_size)
+            !     s = node_prev(i)
+            !     ! allocate(node_pqueue(i)%previous(s))
+
+            !     ! queue(i)%previous = node_prev(i+1:i+s)
+            !     jj()
+
+
+            !     i = i + s + 1
+            ! end do
+            ! queue = [Node::]
+            ! do i = 1, qlen
+            !     node_info%basis = node_int(6*(i-1)+1)
+            !     node_info%tmode = node_int(6*(i-1)+2)
+            !     node_info%basis_type = node_int(6*(i-1)+3)
+            !     node_info%num = node_int(6*(i-1)+4)
+
+            !     queue = [queue, Node('MODE_'//trim(node_info%to_string()), & 
+            !                         node_int(6*(i-1)+5), node_int(6*(i-1)+6), & 
+            !                         [integer::], & 
+            !                         node_logic(i), node_logic(i+qlen)
+            !                         )
+            !             ]
+            ! end do
+
 
             ! расшифровываем
+            c = 1; s = 0
+            allocate(queue(qlen))
             do i = 1, qlen
                 queue(i)%need_calc = node_logic(i)
                 queue(i)%to_res = node_logic(i+qlen)
@@ -251,32 +283,23 @@ contains
 
                 queue(i)%item%m = node_int(6*(i-1)+5)
                 queue(i)%item%lnum = node_int(6*(i-1)+6)
+
+                s = node_prev(c)
+                queue(i)%previous = node_prev(c+1:c+s)
+                c = c + s + 1
             end do
             
-            i = 1; s = 0
-            print*, "sum_size", sum_size
-            do while (i <= sum_size)
-                s = node_prev(i)
-                ! allocate(node_pqueue(i)%previous(s))
-
-                queue(i)%previous = node_prev(i+1:i+s)
-                print*, i,"a", node_prev(i+1:i+s)
-                print*, i,"b", queue(i)%previous
-
-                i = i + s + 1
-            end do
-
             deallocate(node_prev, node_logic, node_int)
 
 
 
 
             print*, "-------------------------------"
-            ! print*, Node1%info%to_string()
-            ! print*, Node1%item%to_string()
-            ! print*, Node1%previous
-            ! print*, Node1%need_calc
-            ! print*, Node1%to_res
+            print*, 2, queue(1)%info%to_string()
+            print*, 2, queue(1)%item%to_string()
+            print*, 2, queue(1)%previous
+            print*, 2, queue(1)%need_calc
+            print*, 2, queue(1)%to_res
 
 
             ! принять массивы из остальных потоков 
@@ -326,7 +349,7 @@ contains
 
         end if
 
-        call MPI_Finalize(Err)
+        ! call MPI_Finalize(Err)
         ! deallocate(queue, mode_res)
 
 
