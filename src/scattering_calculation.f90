@@ -368,6 +368,7 @@ contains
 
 
             print*, "-------------------------------"
+            print*, status%MPI_SOURCE
             ! print*, 2, mode_res(1)%factors%Qext
             ! print*, 2, mode_res(1)%factors%Qsca
             ! print*, 2, mode_res(1)%tmatrix(3,5)
@@ -375,6 +376,9 @@ contains
             ! print*, 2, mode_res(1)%tmatrix(8,2)
             ! print*, 2, mode_res(1)%solution
 
+
+            ! m = m_array(Rank)
+            m = m_array(status%MPI_SOURCE)
 
 
 
@@ -394,7 +398,6 @@ contains
                 ! и из этого по элементам mode_resЫ-accuracyЫ
                     solutions = typed_model%solution_places(m)
                     do i = 1, size(solutions)
-                        print*, "rrr"
                         dim = size(mode_res(solutions(i)%source_tm)%solution)
                         solution_tm(:dim,solutions(i)%m) = mode_res(solutions(i)%source_tm)%solution
                         solution_te(:dim,solutions(i)%m) = mode_res(solutions(i)%source_te)%solution

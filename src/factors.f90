@@ -54,10 +54,15 @@ program factors
 
     call shape%set(f, rv(1), ab(1), alpha)
 
+
+    if (Rank == 0) then
+
     call log_mode_factors('Q SPH_TM', result%sph_tm)
     call log_mode_factors('Q SPH_TE', result%sph_te)
     call log_mode_factors('C_norm SPH_TM', get_normalized_c_factors_from_q(result%sph_tm, shape))
     call log_mode_factors('C norm SPH_TE', get_normalized_c_factors_from_q(result%sph_te, shape))
+
+    end if
 
     deallocate(rv, xv, ab, ri)
     if (LOG_INFO) close(LOG_FD)
