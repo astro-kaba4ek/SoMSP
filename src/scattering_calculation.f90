@@ -59,11 +59,15 @@ contains
 
         call res%initialize()
 
+        if (Rank == 0) then
+        
         99 format('#',1A5,' ', 1A12,' ',6A24)
             write(*,99) 'm', 'potentials', &
             'Q_{TM}^{ext}', 'Q_{TM}^{sca}', 'Q_{TM}^{abs}', &
             'Q_{TE}^{ext}', 'Q_{TE}^{sca}', 'Q_{TE}^{abs}'
 
+        end if
+        
         sph_lnum = lnum
         if (present(spherical_lnum)) then
             sph_lnum = spherical_lnum
@@ -306,11 +310,6 @@ contains
 
 
 
-
-            
-
-
-
             ! принимаем шифорванный mode_res
             if (knd == 16) then
                 allocate(MCR_real(2*qlen))
@@ -374,13 +373,6 @@ contains
             ! print*, 2, mode_res(1)%tmatrix(1,1)
             ! print*, 2, mode_res(1)%tmatrix(8,2)
             ! print*, 2, mode_res(1)%solution
-
-
-
-
-
-
-
 
 
 
