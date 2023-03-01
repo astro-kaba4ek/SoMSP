@@ -104,6 +104,7 @@ contains
         ! call MPI_Comm_rank(MPI_COMM_WORLD, Rank, Err)
         ! call MPI_Comm_size(MPI_COMM_WORLD, Mpi_size, Err)
 
+        accuracy = 0
 
         allocate(m_array(maxm-minm+1))
         m_array = [(m, m=minm, maxm)]
@@ -124,7 +125,7 @@ contains
             endif
             call log_node_queue(queue)
 
-            accuracy = 0
+            ! accuracy = 0
             mode_res = calculate_m(scattering_context, queue, m, lnum, sph_lnum)
             
             print*, "lol"
@@ -393,6 +394,7 @@ contains
                 ! и из этого по элементам mode_resЫ-accuracyЫ
                     solutions = typed_model%solution_places(m)
                     do i = 1, size(solutions)
+                        print*, "rrr"
                         dim = size(mode_res(solutions(i)%source_tm)%solution)
                         solution_tm(:dim,solutions(i)%m) = mode_res(solutions(i)%source_tm)%solution
                         solution_te(:dim,solutions(i)%m) = mode_res(solutions(i)%source_te)%solution
