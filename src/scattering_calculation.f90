@@ -341,7 +341,8 @@ contains
             
             deallocate(node_prev, node_logic, node_int)
 
-            queue_m(1:,m) = queue
+            ! print*, size(queue_m(:,m)), m, size(queue), qlen
+            queue_m(:qlen,m) = queue
 
 
             ! принимаем шифорванный mode_res
@@ -400,10 +401,10 @@ contains
             deallocate(ij, MCR_real, MCR_comp_mat, MCR_comp_arr, MCR_ind)
 
             ! allocate(mode_res_m(minm:maxm,1))
-            mode_res_m(1:,m) = mode_res
+            mode_res_m(:qlen,m) = mode_res
             deallocate(queue, mode_res)
 
-            print*, "kek", rank, m
+            ! print*, "kek", rank, m
             end do
 
             print*, "-------------------------------"
