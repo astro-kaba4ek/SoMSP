@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.6)
 project(Runnable VERSION 0.1.0)
 enable_language (Fortran)
 
-# находим MPI в системе
+# find MPI in the system
 find_package(MPI REQUIRED)
 
 # set(CMAKE_Fortran_COMPILER "/usr/bin/gfortran-11")
@@ -70,7 +70,7 @@ if(DEFINED LOG)
     endif()
 endif()
 target_link_libraries(main regime MPI::MPI_Fortran)
-# линкуем проект и MPI-библиотеку
+# link the project and the MPI-library
 
 add_library(spheroidal_scattering ${SOURCES})
 target_link_libraries(spheroidal_scattering regime)

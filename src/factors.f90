@@ -35,17 +35,12 @@ program factors
         endif
     enddo
     
-    ! циганские фокусы объявляются открытыми
+    ! MPI on
     call MPI_Init(Err)
     call MPI_Comm_rank(MPI_COMM_WORLD, Rank, Err)
-    call MPI_Comm_size(MPI_COMM_WORLD, Mpi_size, Err)
 
-    ! if (Rank == 0) then
     call read_input(input_file, f, nol, rv, xv, ab, alpha, lambda, ri, matrix_size, spherical_lnum, minm, maxm, model, &
     ntheta, theta0, theta1, nphi, phi0, phi1)
-    ! end if
-
-    ! call MPI_Barrier(MPI_COMM_WORLD, Err)
 
     call global_context%initialize(f, nol, xv, ab, alpha, lambda, ri, matrix_size, spherical_lnum, minm, maxm, &
     ntheta, theta0, theta1, nphi, phi0, phi1)
@@ -54,21 +49,17 @@ program factors
 
     call shape%set(f, rv(1), ab(1), alpha)
 
-
     if (Rank == 0) then
-
-    call log_mode_factors('Q SPH_TM', result%sph_tm)
-    call log_mode_factors('Q SPH_TE', result%sph_te)
-    call log_mode_factors('C_norm SPH_TM', get_normalized_c_factors_from_q(result%sph_tm, shape))
-    call log_mode_factors('C norm SPH_TE', get_normalized_c_factors_from_q(result%sph_te, shape))
-
+        call log_mode_factors('Q SPH_TM', result%sph_tm)
+        call log_mode_factors('Q SPH_TE', result%sph_te)
+        call log_mode_factors('C_norm SPH_TM', get_normalized_c_factors_from_q(result%sph_tm, shape))
+        call log_mode_factors('C norm SPH_TE', get_normalized_c_factors_from_q(result%sph_te, shape))
     end if
 
     deallocate(rv, xv, ab, ri)
     if (LOG_INFO) close(LOG_FD)
 
-
-
+    ! MPI off
     call MPI_Finalize(Err)
 
 end program factors
