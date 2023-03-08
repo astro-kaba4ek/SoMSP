@@ -7,9 +7,9 @@ find_package(MPI REQUIRED)
 
 # set(CMAKE_Fortran_COMPILER "/usr/bin/gfortran-11")
 set (CMAKE_Fortran_FLAGS_RELEASE "-Ofast -flto -fmax-stack-var-size=65536")
-# set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fbounds-check -fmax-stack-var-size=65536")
+set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fbounds-check -fmax-stack-var-size=65536")
 # set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fsanitize=address")
-set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fsanitize=address -fbounds-check -fmax-stack-var-size=65536")
+# set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fsanitize=address -fbounds-check -fmax-stack-var-size=65536")
 
 set(CMAKE_Fortran_MODULE_DIRECTORY "./modfiles")
 

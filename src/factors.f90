@@ -38,6 +38,7 @@ program factors
     ! MPI on
     call MPI_Init(Err)
     call MPI_Comm_rank(MPI_COMM_WORLD, Rank, Err)
+    call MPI_Comm_size(MPI_COMM_WORLD, Size_mpi, Err)
 
     call read_input(input_file, f, nol, rv, xv, ab, alpha, lambda, ri, matrix_size, spherical_lnum, minm, maxm, model, &
     ntheta, theta0, theta1, nphi, phi0, phi1)

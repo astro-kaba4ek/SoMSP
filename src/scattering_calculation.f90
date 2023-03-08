@@ -47,9 +47,9 @@ contains
 
         ! MPI variables
         logical, allocatable :: node_logic(:)
-        logical :: skip(minm:maxm)
-        integer, allocatable :: node_int(:), node_prev(:), nodes_previous(:,:), ij(:,:), MCR_ind(:)
-        integer :: sum_size, sum_size2, k, s, c, c1, qlen_m(minm:maxm), m_array(maxm-minm+1)
+        logical :: skip(Size_mpi-1)
+        integer, allocatable :: node_int(:), node_prev(:), nodes_previous(:,:), ij(:,:), MCR_ind(:), qlen_m(:)
+        integer :: sum_size, sum_size2, k, s, c, c1, m_array(Size_mpi-1), iter!, m_array(maxm-minm+1), qlen_m(minm:maxm)
         real(knd), allocatable :: MCR_real(:)
         complex(knd), allocatable :: MCR_comp_mat(:), MCR_comp_arr(:)
         type(Node), allocatable :: queue_m(:,:)
@@ -97,7 +97,17 @@ contains
         if (LOG_INFO) write(LOG_FD,*) '{INFO} start calculation with model '//model
 
 
-        m_array = [(m, m=minm, maxm)]
+        real_maxm = -1
+        accuracy = 0
+
+
+        ! outer_loop: do while (iter <= maxm)
+        outer_loop: do iter = minm, maxm, Size_mpi-1
+        ! print*, "iter", iter
+
+        
+        m_array = [(m, m=iter, iter+Size_mpi-1-1)]
+        ! print*, "m_arr", m_array
 
         if (Rank /= 0) then
             m = m_array(Rank)
@@ -106,7 +116,9 @@ contains
             if (LOG_INFO) write(LOG_FD,*) 
 
             qlen = size(queue)
-            if (qlen == 0) then
+            if (qlen == 0 .or. m > maxm) then
+
+                qlen = 0
 
                 call MPI_Ssend(qlen, 1, MPI_INTEGER, 0, m, MPI_COMM_WORLD, Err)
                 call MPI_Barrier(MPI_COMM_WORLD, Err)
@@ -191,7 +203,7 @@ contains
             ! collect an array with information about the lengths of the "queue" and "mode_res" arrays 
             ! (they may differ at each iteration of the loop)
             skip = .false.
-            qlen_m = 0
+            allocate(qlen_m(iter:iter+Size_mpi-1)); qlen_m = 0
             do k = 1, size(m_array)
 
                 call MPI_Recv(qlen, 1, MPI_INTEGER, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err)
@@ -200,13 +212,13 @@ contains
                 m = Status%MPI_TAG
                 qlen_m(m) = qlen
 
-                if (qlen == 0) skip(m) = .true. ! TRUE == skip this "m"
+                if (qlen == 0) skip(k) = .true. ! TRUE == skip this "m"
 
             enddo
             call MPI_Barrier(MPI_COMM_WORLD, Err)
 
 
-            allocate(mode_res_m(maxval(qlen_m),minm:maxm), queue_m(maxval(qlen_m),minm:maxm))
+            allocate(mode_res_m(maxval(qlen_m),iter:iter+Size_mpi-1), queue_m(maxval(qlen_m),iter:iter+Size_mpi-1))
 
             do k = 1, size(m_array)-count(skip)
                 
@@ -310,13 +322,15 @@ contains
 
             enddo
 
-            accuracy = 0
+            ! accuracy = 0
     
             ! essentially the same loop as it was, 
             ! but all the heavy calculations have already been calculated and collected above
             do k = 1, size(m_array)
                 m = m_array(k)
                 qlen = qlen_m(m)
+
+                ! print*, k, m, qlen
 
                 if (qlen == 0) cycle
 
@@ -345,16 +359,25 @@ contains
 
                 call typed_model%print_mode_row(m, mode_res_m(:,m))
 
+
                 if (size(queue_m(:,m)) > 0 .and. accuracy < MIN_M_RATIO) then
+                    ! print*, "loll"
                     real_maxm = m
-                    exit
+                    exit outer_loop
                 endif
 
             enddo
 
-            deallocate(mode_res_m, queue_m)
+            deallocate(mode_res_m, queue_m, qlen_m)
 
         endif
+
+
+        ! iter = iter + Size_mpi - 1
+
+        end do outer_loop
+
+        ! print*, "real_maxm", real_maxm
 
         if (.not. need_indicatrix) then
             return
