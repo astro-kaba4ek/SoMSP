@@ -193,7 +193,7 @@ contains
                 endif
 
                 ! checking the achieved accuracy and exiting the outer loop
-                call MPI_Barrier(MPI_COMM_WORLD, Err)
+                ! call MPI_Barrier(MPI_COMM_WORLD, Err)
                 call MPI_Bcast(accuracy_logic, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, Err)
                 if (accuracy_logic) exit 
 
@@ -203,7 +203,7 @@ contains
                 ! collect an array with information about the lengths of the "queue" and "mode_res" arrays 
                 ! (they may differ at each iteration of the loop)
                 skip = .false.
-                allocate(qlen_m(iter:iter+Size_mpi-1)); qlen_m = 0
+                allocate(qlen_m(iter:iter+Size_mpi-1-1)); qlen_m = 0
                 do k = 1, size(m_array)
 
                     call MPI_Recv(qlen, 1, MPI_INTEGER, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, Status, Err)
@@ -218,7 +218,8 @@ contains
                 call MPI_Barrier(MPI_COMM_WORLD, Err)
 
 
-                allocate(mode_res_m(maxval(qlen_m),iter:iter+Size_mpi-1), queue_m(maxval(qlen_m),iter:iter+Size_mpi-1))
+                allocate(mode_res_m(maxval(qlen_m),iter:iter+Size_mpi-1-1), & 
+                        queue_m(maxval(qlen_m),iter:iter+Size_mpi-1-1))
 
                 do k = 1, size(m_array)-count(skip)
                     
@@ -320,10 +321,6 @@ contains
 
                     deallocate(ij, MCR_real, MCR_comp_mat, MCR_comp_arr, MCR_ind, mode_res)
 
-
-                    ! print*,"qwerty0", iter, m, rank
-
-
                 enddo
 
 
@@ -341,9 +338,10 @@ contains
                         if (queue_m(i,m)%to_res) then
                             accuracy = max(accuracy, res%update_and_get_accuracy(queue_m(i,m)%info, mode_res_m(i,m)%factors))
                         endif
+                        ! print*, "kekeke",m, accuracy
                     enddo
 
-                    call typed_model%print_mode_row(m, mode_res_m(:,m))
+                    call typed_model%print_mode_row(m, mode_res_m(:qlen,m))
 
                     if (need_indicatrix) then
                         solutions = typed_model%solution_places(m)
@@ -358,13 +356,20 @@ contains
                             nphi, scattering_context%directions%phis, direction_calculation, & 
                             mode_res_m(solutions(i)%source_te,m)%solution, mode_res_m(solutions(i)%source_tm,m)%solution)
                             accuracy = max(accuracy, update_amplitude_and_get_accuracy(ampl, update, ntheta, nphi))
+                            
+                            ! print*, "ggggg", m, ampl
+                            ! print*, "ggggg", m, update
+                            ! print*, "ggggg", m, ntheta
+                            ! print*, "ggggg", m, nphi
+                            ! print*, "ggggg", m, update_amplitude_and_get_accuracy(ampl, update, ntheta, nphi)
+                            ! print*, "lollol", m, accuracy
                         enddo
         
                     endif
 
-                    print*, "accuracy", size(queue_m(:,m)), accuracy, MIN_M_RATIO
+                    print*, "accuracy", size(queue_m(:qlen,m)), accuracy, MIN_M_RATIO
 
-                    if (size(queue_m(:,m)) > 0 .and. accuracy < MIN_M_RATIO) then
+                    if (size(queue_m(:qlen,m)) > 0 .and. accuracy < MIN_M_RATIO) then
                         accuracy_logic = .true.
                         real_maxm = m
                         exit
@@ -375,7 +380,7 @@ contains
                 deallocate(mode_res_m, queue_m, qlen_m)
 
                 ! inform all threads about the achieved accuracy and exit the outer loop
-                call MPI_Barrier(MPI_COMM_WORLD, Err)
+                ! call MPI_Barrier(MPI_COMM_WORLD, Err)
                 call MPI_Bcast(accuracy_logic, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, Err)
                 if (accuracy_logic) exit 
 
@@ -409,8 +414,8 @@ contains
             enddo
 
             call print_scattering_matrix_bucket(&
-        current_size, scattering_context%directions%thetas(theta_bucket_start:current_end), &
-        nphi, scattering_context%directions%phis, ampl(:,:,:,1:current_end))
+            current_size, scattering_context%directions%thetas(theta_bucket_start:current_end), &
+            nphi, scattering_context%directions%phis, ampl(:,:,:,1:current_end))
         enddo
 
         deallocate(typed_model)
