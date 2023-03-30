@@ -42,7 +42,7 @@ All values that depend on layer number are written from outside to the core.
 2. n > 0 - number of layers
 3. xv... - list of n real numbers - xv of the respective layer   
 4. ab... - list of n real numbers - ab = a/b of the respective layer
-5 ri... - list of n+1 complex numbers - refractive indices of the respective areas first number is the refractive index outside the particle, the rest inside its layers.
+5. ri... - list of n+1 complex numbers - refractive indices of the respective areas first number is the refractive index outside the particle, the rest inside its layers.
 6. lamba - real number, the wavelength
 7. alpha - the angle between the light propagation direction and the scatterer's symmetry axis in degrees.
 8. lnum - the number of elements of expansion over the spheroidal functions. if it equals 0, the empirical value of 2*PI*a/lambda + 8 is used (here a is the bigger semiaxis of the spheroid)
@@ -64,9 +64,9 @@ Generally, we consider uv_pq_te_from_tm to be the most precise and fastest way
 
 Next 2 lines specify borders for scattering matrix calculation. All angles are in the coordinate system of the scatterer.
 
-12. ntheta theta0 theta1 - calculate for ntheta uniformly distributed points in [theta0; theta1] (with ntheta-1 interval between them). 
+13. ntheta theta0 theta1 - calculate for ntheta uniformly distributed points in [theta0; theta1] (with ntheta-1 interval between them). 
 theta0 and theta1 are in degrees and should be in [0; 360] with theta0 <= theta1
-13. nphi phi0 phi1 same as theta, but phi0, phi1 should be in [0; 180]
+14. nphi phi0 phi1 same as theta, but phi0, phi1 should be in [0; 180]
 
 Scattering matrix is calculated if both ntheta and nphi > 0.
 
