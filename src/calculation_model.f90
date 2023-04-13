@@ -75,6 +75,13 @@ module calculation_models
         procedure, nopass :: solution_places => solution_places_uv_pq_te_from_tm
     end type UVPQTEFromTMModel
 
+    type, extends(CalculationModel) :: UVPQTEFromTMWithFarModel
+    contains
+        procedure, nopass :: build_mode_queue => build_queue_uv_pq_te_from_tm_with_far
+        procedure, nopass :: print_mode_row => print_row_uv_pq_te_from_tm_with_far
+        procedure, nopass :: solution_places => solution_places_uv_pq_te_from_tm
+    end type UVPQTEFromTMWithFarModel
+
     interface CalculationModel
         procedure :: construct_calculation_model
     end interface CalculationModel
@@ -110,6 +117,36 @@ contains
 
     end subroutine build_queue_uv_pq_te_from_tm
 
+    subroutine build_queue_uv_pq_te_from_tm_with_far(m, lnum, spherical_lnum, queue)
+        type(Node), allocatable, intent(out) :: queue(:)
+        integer, intent(in) :: m, lnum, spherical_lnum
+
+        if (m == 1) then
+            queue = [ &
+                Node(MODE_SPH_TM_UV, m, lnum, [integer::], .true., .true.), &
+                Node(MODE_FAR_TM_UV, m, spherical_lnum, [1], .true., .true.), &
+                Node(MODE_BARBER, m, spherical_lnum, [2], .false., .false.), &
+                Node(MODE_FAR_TE_UV, m, spherical_lnum, [3], .true., .true.), &
+                Node(MODE_SPH_TE_UV, m, lnum, [4], .true., .true.), &
+                Node(MODE_SPH_TM_PQ, m, lnum, [integer::], .true., .true.), &
+                Node(MODE_SPH_TE_PQ, m, lnum, [integer::], .true., .true.), &
+                Node(MODE_FAR_TM_PQ, m, lnum, [6], .true., .true.), &
+                Node(MODE_FAR_TE_PQ, m, lnum, [7], .true., .true.) &
+            ]
+        elseif (m == 0) then
+            queue = [Node::]
+        else
+            queue = [ &
+                Node(MODE_SPH_TM_UV, m, lnum, [integer::], .true., .true.), &
+                Node(MODE_FAR_TM_UV, m, spherical_lnum, [1], .true., .true.), &
+                Node(MODE_BARBER, m, spherical_lnum, [2], .false., .false.), &
+                Node(MODE_FAR_TE_UV, m, spherical_lnum, [3], .true., .true.), &
+                Node(MODE_SPH_TE_UV, m, lnum, [4], .true., .true.) &
+            ]
+        endif
+
+    end subroutine build_queue_uv_pq_te_from_tm_with_far
+
     subroutine print_row_uv_pq_te_from_tm(m, mode_res)
         integer, intent(in) :: m
         type(ModeCalculationResult), intent(in) :: mode_res(:)
@@ -133,6 +170,44 @@ contains
                 mode_res(7)%factors%qabs()  
         endif
     end subroutine print_row_uv_pq_te_from_tm
+
+    subroutine print_row_uv_pq_te_from_tm_with_far(m, mode_res)
+        integer, intent(in) :: m
+        type(ModeCalculationResult), intent(in) :: mode_res(:)
+
+        if (m > 0) then
+            write(*,row_format) m, 'UV', &
+                mode_res(1)%factors%Qext, &
+                mode_res(1)%factors%Qsca, &
+                mode_res(1)%factors%qabs(), &
+                mode_res(5)%factors%Qext, &
+                mode_res(5)%factors%Qsca, &
+                mode_res(5)%factors%qabs()
+            write(*,row_format) m, 'FAR_UV', &
+                mode_res(2)%factors%Qext, &
+                mode_res(2)%factors%Qsca, &
+                mode_res(2)%factors%qabs(), &
+                mode_res(4)%factors%Qext, &
+                mode_res(4)%factors%Qsca, &
+                mode_res(4)%factors%qabs()
+        endif
+        if (m == 1) then
+            write(*,row_format) m, 'PQ', &
+                mode_res(6)%factors%Qext, &
+                mode_res(6)%factors%Qsca, &
+                mode_res(6)%factors%qabs(), &
+                mode_res(7)%factors%Qext, &
+                mode_res(7)%factors%Qsca , &
+                mode_res(7)%factors%qabs()  
+            write(*,row_format) m, 'FAR_PQ', &
+                mode_res(8)%factors%Qext, &
+                mode_res(8)%factors%Qsca, &
+                mode_res(8)%factors%qabs(), &
+                mode_res(9)%factors%Qext, &
+                mode_res(9)%factors%Qsca , &
+                mode_res(9)%factors%qabs()  
+        endif
+    end subroutine print_row_uv_pq_te_from_tm_with_far
 
     function solution_places_uv_pq_te_from_tm(m) result(res)
         integer, intent(in) :: m
@@ -373,6 +448,8 @@ contains
             allocate(UVPQModel::model)
         elseif (model_name == 'uv_pq_te_from_tm') then
             allocate(UVPQTEFromTMModel::model)
+        elseif (model_name == 'uv_pq_te_from_tm_with_far') then
+            allocate(UVPQTEFromTMWithFarModel::model)
         else
             call assert(.false., 'unknown model name '//model_name)
         endif

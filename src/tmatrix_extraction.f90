@@ -7,29 +7,31 @@ module tmatrix_extraction
     implicit none
 contains
 
-    subroutine GetSpheroidalTmatrix(ab_in, rv_in, lambda_in, lnum_in, ri_in, m_in, res)
-        real(C_FLOAT128) :: ab_in, rv_in, lambda_in
-        integer(C_INT32_T) :: lnum_in, m_in
-        complex(C_FLOAT128_COMPLEX) :: ri_in, res(2*lnum_in, 2*lnum_in)
+    subroutine GetSpheroidalTmatrix(nol_in, ab_in, rv_in, lambda_in, lnum_in, ri_in, m_in, res)
+        real(C_FLOAT128) :: ab_in(nol_in), rv_in(nol_in), lambda_in
+        integer(C_INT32_T) :: lnum_in, m_in, nol_in
+        complex(C_FLOAT128_COMPLEX) :: ri_in(nol_in), res(2*lnum_in, 2*lnum_in)
 
         type(ScatteringContext) :: global_context
-        integer, parameter :: nol = 1
+        integer :: nol
         integer :: f, lnum, spherical_lnum, m, result_num, i
         real(knd), parameter :: alpha = 0.0_knd !PI / 4.0_knd
-        real(knd) :: xv(nol), ab(nol), lambda
-        complex(knd) :: ri(0:nol)
+        real(knd) :: xv(nol_in), ab(nol_in), lambda
+        complex(knd) :: ri(0:nol_in)
         type(Node), allocatable:: queue(:)
         type(ModeCalculationResult), allocatable :: mode_res(:)
 
         f = -1
-        ab = [ab_in]
-        if (ab_in < 1.0q0) then
+        ab = ab_in
+        if (ab_in(1) < 1.0q0) then
             f = 1
             ab = 1q0 / ab
         end if
-        xv = [rv_in * 2.0_knd * PI / lambda_in]
+        nol = nol_in
+        xv = rv_in * 2.0_knd * PI / lambda_in
         lambda = lambda_in
-        ri = [cmplx(1.0_knd, 0.0_knd, knd), cmplx(real(ri_in, knd), imag(ri_in), knd)]
+        ri(0) = cmplx(1.0_knd, 0.0_knd, knd)
+        ri(1:nol) = [(cmplx(real(ri_in(i), knd), imag(ri_in(i)), knd), i=1,nol)]
         lnum = lnum_in
         spherical_lnum = lnum_in
         if (lnum < 2) then
@@ -78,6 +80,7 @@ contains
         res(1:lnum_in, lnum_in + 1:2 *lnum_in) = -transpose(mode_res(result_num)%tmatrix(lnum_in + 1:2 *lnum_in, 1:lnum_in))
         res(lnum_in + 1:2 *lnum_in, 1:lnum_in) = -transpose(mode_res(result_num)%tmatrix(1:lnum_in, lnum_in + 1:2 *lnum_in))
         ! res = transpose(mode_res(result_num)%tmatrix(1:2*lnum_in, 1:2*lnum_in))
+        write(*,*) 'inside te result = ', mode_res(1)%tmatrix(:,1)
         write(*,*) 'inside result = ', res(:,1)
         do i = 1, size(queue)
             if (allocated(queue(i)%previous)) deallocate(queue(i)%previous)

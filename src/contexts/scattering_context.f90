@@ -26,7 +26,7 @@ contains
     real(knd), intent(in) :: xv(nol), ab(nol), alpha, lambda, theta0, theta1, phi0, phi1
     complex(knd) :: ri(0:nol)
 
-    call this%scatterer%set(f, xv, ab, alpha, nol)
+    call this%scatterer%set(f, xv, ab, alpha, nol, lambda)
     call this%calculation_point%initialize(lambda, nol, ri)
     call this%directions%initialize(alpha, ntheta, theta0, theta1, nphi, phi0, phi1, minm, maxm)
 

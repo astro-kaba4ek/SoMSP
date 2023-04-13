@@ -7,29 +7,6 @@ module spheroidal_scatterer
     use utils
     implicit none
 
-    ! represents geometric properties of the scatterer
-    type, public :: SpheroidalScatterer
-
-        integer :: spheroidal_type
-
-        !  parameters used during calculation obtained from shape
-
-        integer :: number_of_layers
-        !  radial coordinates of the scatterer's layers
-        real(knd), allocatable, dimension(:) :: ksi   !  1..number_of_layers
-        real(knd), allocatable, dimension(:) :: d   !  1..number_of_layers
-        !  precalculated factor from extinction and scattering coefficient
-        complex(knd), allocatable, dimension(:) :: c0   !  1..number_of_layers
-        !  argument of the spheroidal function corresponding to the external field (layer 0)
-        real(knd), allocatable, dimension(:) :: common_factor   !  1..number_of_layers
-
-    contains
-
-        procedure, public :: set
-
-        final :: delete_scatterer
-    end type SpheroidalScatterer
-
     type, public :: SpheroidalShape
         ! shape of the scatterrer
 
@@ -47,6 +24,30 @@ module spheroidal_scatterer
     contains
         procedure, public :: set => set_spheroidal_shape
     end type SpheroidalShape
+
+    ! represents geometric properties of the scatterer
+    type, public :: SpheroidalScatterer
+
+        integer :: spheroidal_type
+
+        !  parameters used during calculation obtained from shape
+
+        integer :: number_of_layers
+        !  radial coordinates of the scatterer's layers
+        real(knd), allocatable, dimension(:) :: ksi   !  1..number_of_layers
+        real(knd), allocatable, dimension(:) :: d   !  1..number_of_layers
+        !  precalculated factor from extinction and scattering coefficient
+        complex(knd), allocatable, dimension(:) :: c0   !  1..number_of_layers
+        !  argument of the spheroidal function corresponding to the external field (layer 0)
+        real(knd), allocatable, dimension(:) :: common_factor   !  1..number_of_layers
+
+        type(SpheroidalShape) :: shape
+    contains
+
+        procedure, public :: set
+
+        final :: delete_scatterer
+    end type SpheroidalScatterer
 
 contains
     !  for the given rv and ab returns a - the major semiaxis
@@ -73,10 +74,10 @@ contains
         endif
     end function get_b
 
-    subroutine set(this, f, xv, ab, alpha, number_of_layers)
+    subroutine set(this, f, xv, ab, alpha, number_of_layers, lambda)
 
         class(SpheroidalScatterer) :: this
-        real(knd) :: xv(number_of_layers), ab(number_of_layers), alpha, a(number_of_layers), b(number_of_layers)
+        real(knd) :: xv(number_of_layers), ab(number_of_layers), alpha, a(number_of_layers), b(number_of_layers), lambda
         integer :: f, number_of_layers
 
         this%spheroidal_type = f
@@ -105,6 +106,8 @@ contains
 
         this%common_factor = 1q0 / (abs(this%c0)**2q0 * &
                 sqrt((this%ksi**2 - this%spheroidal_type) * (this%ksi**2 - this%spheroidal_type * cos(alpha)**2)))
+
+        call this%shape%set(f, xv(1) * lambda / (2.0 * PI), ab(1), alpha)
 
     end subroutine set
 
@@ -148,6 +151,22 @@ contains
             C = Q * PI * a * sqrt(b**2 * sin(alpha) ** 2 + a ** 2 * cos(alpha) ** 2)
         end if
     end function convertQtoC
+
+    real(knd) function convertCtoQ(C, f, rv, ab, alpha) result(Q)
+        integer, intent(in) :: f
+        real(knd), intent(in) :: C, rv, ab, alpha
+
+        real(knd) :: a, b
+
+        a = get_a(f, rv, ab)
+        b = get_b(f, rv, ab)
+
+        if (f == 1) then
+            Q = C / (PI * b * sqrt(a**2 * sin(alpha) ** 2 + b ** 2 * cos(alpha) ** 2))
+        else
+            Q = C / (PI * a * sqrt(b**2 * sin(alpha) ** 2 + a ** 2 * cos(alpha) ** 2))
+        end if
+    end function convertCtoQ
 
     type(ModeFactors) function get_c_factors_from_q(factors, shape)
         type(ModeFactors), intent(in) :: factors

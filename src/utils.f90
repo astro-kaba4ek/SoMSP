@@ -80,7 +80,7 @@ module utils
     end type ModeCalculationResult
 
     type :: ScatteringResult
-        type(ModeFactors) :: sph_tm, sph_te
+        type(ModeFactors) :: sph_tm, sph_te, far_te, far_tm
     contains
         procedure :: initialize => initialize_scattering_result
         procedure :: update_and_get_accuracy => update_and_get_accuracy_scattering_result
@@ -274,6 +274,8 @@ contains
 
         call this%sph_te%initialize()
         call this%sph_tm%initialize()
+        call this%far_te%initialize()
+        call this%far_tm%initialize()
     
     end subroutine initialize_scattering_result
 
@@ -302,6 +304,10 @@ contains
             res = this%sph_te%update_and_get_accuracy(update)
         elseif (mode == MODE_SPH_TM_PQ .or. mode == MODE_SPH_TM_UV) then
             res = this%sph_tm%update_and_get_accuracy(update)
+        elseif (mode == MODE_FAR_TE_PQ .or. mode == MODE_FAR_TE_UV) then
+            res = this%far_te%update_and_get_accuracy(update)
+        elseif (mode == MODE_FAR_TM_PQ .or. mode == MODE_FAR_TM_UV) then
+            res = this%far_tm%update_and_get_accuracy(update)
         else
             res = 0
         endif
@@ -335,7 +341,7 @@ contains
         real(knd), allocatable, intent(inout) :: rv(:), xv(:), ab(:)
         real(knd), intent(inout) :: alpha, lambda, theta0, theta1, phi0, phi1
         complex(knd), allocatable, intent(inout) :: ri(:)
-        character(16) :: model
+        character(32) :: model
     
         character(1024) :: line, name, eq
         integer :: ios, i

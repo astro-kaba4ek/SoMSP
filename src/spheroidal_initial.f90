@@ -122,4 +122,90 @@ contains
 
     end subroutine set_initial_uv_tm
 
+    subroutine set_initial_far_uv_te(computation_context, mode_item, initial)
+        type(ComputationContext), intent(inout) :: computation_context
+        type(ModeItem), intent(in) :: mode_item
+        complex(knd), allocatable, intent(out) :: initial(:)
+
+        type(LegendreCalculation) :: legendre
+        integer :: m, lnum, i
+        type(WavelengthPoint), pointer :: calculation_point
+        type(AngleType), pointer :: alpha
+
+        m = mode_item%m
+        lnum = mode_item%lnum
+        calculation_point => computation_context%scattering_context%calculation_point
+        alpha => computation_context%scattering_context%directions%alpha
+        call legendre%set(m, lnum + m - 1, alpha%angle_cos)
+        call legendre%calculate()
+
+
+        if (allocated(initial) .and. size(initial) /= 2 * lnum) then
+            deallocate(initial)
+        endif
+
+        if(.not. allocated(initial)) then
+            allocate(initial(2 * lnum))
+        endif
+        initial = 0
+
+        do i = 1, lnum
+            initial(i) = IDEG(mod(i + legendre%m + 2, 4)) * legendre%pr(1, i) * sqrt(legendre%coef(i))
+        enddo
+
+        initial = initial * (4q0 / (calculation_point%k * alpha%angle_sin))
+
+    end subroutine set_initial_far_uv_te
+
+    subroutine set_initial_far_pq_tm(computation_context, mode_item, initial)
+        type(ComputationContext), intent(inout) :: computation_context
+        type(ModeItem), intent(in) :: mode_item
+        complex(knd), allocatable, intent(out) :: initial(:)
+
+        call set_initial_far_pq_te(computation_context, mode_item, initial)
+        initial = initial
+
+    end subroutine set_initial_far_pq_tm
+
+    subroutine set_initial_far_pq_te(computation_context, mode_item, initial)
+        type(ComputationContext), intent(inout) :: computation_context
+        type(ModeItem), intent(in) :: mode_item
+        complex(knd), allocatable, intent(out) :: initial(:)
+
+        type(LegendreCalculation) :: legendre
+        integer :: m, lnum, i
+        type(AngleType), pointer :: alpha
+
+        m = mode_item%m
+        lnum = mode_item%lnum
+        alpha => computation_context%scattering_context%directions%alpha
+        call legendre%set(m, lnum + m - 1, alpha%angle_cos)
+        call legendre%calculate()
+
+        if (allocated(initial) .and. size(initial) /= lnum) then
+            deallocate(initial)
+        endif
+
+        if(.not. allocated(initial)) then
+            allocate(initial(lnum))
+        endif
+
+        initial = 0
+
+        do i = 1, lnum
+            initial(i) = -2q0 * IDEG(mod(i + m + 3, 4)) * legendre%pr(1, i) * sqrt(legendre%coef(i))
+        end do
+
+    end subroutine set_initial_far_pq_te
+
+    subroutine set_initial_far_uv_tm(computation_context, mode_item, initial)
+        type(ComputationContext), intent(inout) :: computation_context
+        type(ModeItem), intent(in) :: mode_item
+        complex(knd), allocatable, intent(out) :: initial(:)
+
+        call set_initial_far_uv_te(computation_context, mode_item, initial)
+        initial = initial
+
+    end subroutine set_initial_far_uv_tm
+
 end module spheroidal_initial

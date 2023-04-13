@@ -9,7 +9,7 @@ module constants
     real(knd), parameter :: BASE_ACCURACY = 1e-8_knd
     real(knd), parameter :: MIN_M_RATIO = 1e-8_knd
     real(knd), parameter :: DEFAULT_PAIR_INTEGRAL_ACCURACY = 1e-24_knd;
-    real(4), parameter :: REVERSE_MATRIX_SIZE_RATIO = 1.0 !116.0 / 102.0
+    real(4), parameter :: REVERSE_MATRIX_SIZE_RATIO = 2.0 !116.0 / 102.0
     integer, parameter :: MAXIMUM_MATRIX_SIZE = 400
     integer, parameter :: MAXIMUM_D_COEFF_NUMBER = 100000
     integer, parameter :: BUCKET_SIZE = 20

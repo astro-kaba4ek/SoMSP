@@ -175,6 +175,8 @@ contains
                 write(SCAT_MATR_FD, 101) thetas(i)%value * 180q0 / PI, &
                     phis(j)%value * 180q0 / PI, &
                         bucket(1,1), bucket(2,1), bucket(3,3), bucket(4,3)
+                ! write(*,'(4F24.15)') thetas(i)%value * 180q0 / PI, &
+                ! phis(j)%value * 180q0 / PI, bucket
             end do
         end do
         call cpu_time(finish)
