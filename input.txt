@@ -1,0 +1,15 @@
+-1                                               f
+1                                               number_of_layers
+3q0                                           xv
+10q0                                           ab
+(1q0, 0q0) (1.7q0, 0.7q0)                      ri
+6.283185307179586477                            lambda
+90                                              alpha (degrees)
+30                                              lnum, if =0 then value 2PIa/lambda is used
+0                                               spherical_lnum, if =0 then =lnum
+0                                               minm
+100                                              maxm
+uv_pq_te_from_tm                                one of: compare_uv_pq, compare_te, all_uv, uv_pq, uv_pq_te_from_tm
+37 0.0 180.0                                    ntheta theta0 theta1 betwee 0 and 360
+1 0.0 0.0                                       nphi phi0 phi1 between 0 and 180
+                                                indicatrix is only allowed for all_uv, uv_pq, uv_pq_te_from_tm

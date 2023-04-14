@@ -35,6 +35,11 @@ program factors
             call assert(.false., 'unknown parameter '//trim(arg))
         endif
     enddo
+    
+    ! MPI on
+    call MPI_Init(Err)
+    call MPI_Comm_rank(MPI_COMM_WORLD, Rank, Err)
+    call MPI_Comm_size(MPI_COMM_WORLD, Size_mpi, Err)
 
     call read_input(input_file, f, nol, rv, xv, ab, alpha, lambda, ri, matrix_size, spherical_lnum, minm, maxm, model, &
     ntheta, theta0, theta1, nphi, phi0, phi1)
@@ -46,20 +51,26 @@ program factors
 
     call shape%set(f, rv(1), ab(1), alpha)
 
-    need_far = (model == 'uv_pq_te_from_tm_with_far')
-    call log_mode_factors('Q SPH_TM', result%sph_tm)
-    if (need_far) call log_mode_factors('Q FAR_TM', result%far_tm)
-    call log_mode_factors('Q SPH_TE', result%sph_te)
-    if (need_far) call log_mode_factors('Q FAR_TE', result%far_te)
-    call log_mode_factors('C_SPH_TM', get_c_factors_from_q(result%sph_tm, shape))
-    if (need_far) call log_mode_factors('C FAR_TM', get_c_factors_from_q(result%far_tm, shape))
-    call log_mode_factors('C  SPH_TE', get_c_factors_from_q(result%sph_te, shape))
-    if (need_far) call log_mode_factors('C FAR_TE', get_c_factors_from_q(result%far_te, shape))
-    call log_mode_factors('C_norm SPH_TM', get_normalized_c_factors_from_q(result%sph_tm, shape))
-    if (need_far) call log_mode_factors('C_norm FAR_TM', get_normalized_c_factors_from_q(result%far_tm, shape))
-    call log_mode_factors('C norm SPH_TE', get_normalized_c_factors_from_q(result%sph_te, shape))
-    if (need_far) call log_mode_factors('C norm FAR_TE', get_normalized_c_factors_from_q(result%far_te, shape))
+    if (Rank == 0) then
+        need_far = (model == 'uv_pq_te_from_tm_with_far')
+        call log_mode_factors('Q SPH_TM', result%sph_tm)
+        if (need_far) call log_mode_factors('Q FAR_TM', result%far_tm)
+        call log_mode_factors('Q SPH_TE', result%sph_te)
+        if (need_far) call log_mode_factors('Q FAR_TE', result%far_te)
+        call log_mode_factors('C_SPH_TM', get_c_factors_from_q(result%sph_tm, shape))
+        if (need_far) call log_mode_factors('C FAR_TM', get_c_factors_from_q(result%far_tm, shape))
+        call log_mode_factors('C  SPH_TE', get_c_factors_from_q(result%sph_te, shape))
+        if (need_far) call log_mode_factors('C FAR_TE', get_c_factors_from_q(result%far_te, shape))
+        call log_mode_factors('C_norm SPH_TM', get_normalized_c_factors_from_q(result%sph_tm, shape))
+        if (need_far) call log_mode_factors('C_norm FAR_TM', get_normalized_c_factors_from_q(result%far_tm, shape))
+        call log_mode_factors('C norm SPH_TE', get_normalized_c_factors_from_q(result%sph_te, shape))
+        if (need_far) call log_mode_factors('C norm FAR_TE', get_normalized_c_factors_from_q(result%far_te, shape))
+    end if
 
     deallocate(rv, xv, ab, ri)
     if (LOG_INFO) close(LOG_FD)
+
+    ! MPI off
+    call MPI_Finalize(Err)
+
 end program factors

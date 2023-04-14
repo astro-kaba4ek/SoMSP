@@ -383,6 +383,8 @@ contains
         alpha = min(alpha, PI / 2q0 - 1q-24)
         rv = xv * lambda / (2.0_knd * PI)
     
+        if (Rank == 0) then
+
         write(*, *) 'Read input:'
         write(*, *) 'f = ', f
         write(*, *) 'rv = ', rv
@@ -395,5 +397,8 @@ contains
         write(*, *) 'spherical_lnum = ', spherical_lnum
         write(*, *) 'm = ', minm, ':', maxm
         write(*,*) 'model = ', model
+
+        end if 
+        
     end subroutine read_input
 end module utils

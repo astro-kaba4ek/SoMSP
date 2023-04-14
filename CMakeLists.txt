@@ -2,10 +2,14 @@ cmake_minimum_required(VERSION 3.6)
 project(Runnable VERSION 0.1.0)
 enable_language (Fortran)
 
-set(CMAKE_Fortran_COMPILER "/usr/bin/gfortran-11")
+# find MPI in the system
+find_package(MPI REQUIRED)
+
+# set(CMAKE_Fortran_COMPILER "/usr/bin/gfortran-11")
 set (CMAKE_Fortran_FLAGS_RELEASE "-Ofast -flto -fmax-stack-var-size=65536")
-set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fbounds-check -fmax-stack-var-size=65536")
+# set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fbounds-check -fmax-stack-var-size=65536")
 # set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fsanitize=address")
+set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fsanitize=address -fbounds-check -fmax-stack-var-size=65536")
 
 set(CMAKE_Fortran_MODULE_DIRECTORY "./modfiles")
 
@@ -65,8 +69,8 @@ if(DEFINED LOG)
         target_compile_definitions(main PUBLIC -DNEED_LOG_AMPLITUDE) 
     endif()
 endif()
-target_link_libraries(main regime)
+target_link_libraries(main regime MPI::MPI_Fortran)
+# link the project and the MPI-library
 
 add_library(spheroidal_scattering ${SOURCES})
 target_link_libraries(spheroidal_scattering regime)
-
