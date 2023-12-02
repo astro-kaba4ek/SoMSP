@@ -8,7 +8,8 @@ module constants
 
     ! MPI constants
     integer, public :: Err, Rank, Size_mpi
-    type(MPI_Status) :: Status
+    type(MPI_Datatype), public :: MPI_REAL_knd, MPI_COMPLEX_knd
+    type(MPI_Status), public :: Status
 
     real(knd), parameter :: PI = 4.0_knd * atan(1.0_knd)
     real(knd), parameter :: BASE_ACCURACY = 1e-8_knd
