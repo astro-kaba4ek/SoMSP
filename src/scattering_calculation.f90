@@ -31,16 +31,13 @@ contains
         class(CalculationModel), intent(in) :: typed_model
 
         ! MPI variables
-        logical, allocatable :: node_logic(:)
         logical, intent(inout) :: accuracy_logic
-        integer, allocatable :: node_int(:), node_prev(:), ij(:,:), MCR_ind(:)
-        integer :: s, sum_size, sum_size2, m_array(Size_mpi-1), iter
-        real(knd), allocatable :: MCR_real(:)
-        complex(knd), allocatable :: MCR_comp_mat(:), MCR_comp_arr(:)
-        integer :: m_array_all(minm:maxm)
-
-
+        integer, allocatable :: ij(:,:)
+        integer :: s, sum_size, m_array(Size_mpi-1), iter, m_array_all(minm:maxm), position, len_prev, queue_buf_len
+        type(MPI_Datatype) :: MPI_ModeInfo_type, MPI_ModeItem_type, MPI_Node_type
         real(knd) :: time_t3, time_t4
+        integer(MPI_ADDRESS_KIND) :: lb, MPI_ModeInfo_size, MPI_ModeItem_size
+        character, allocatable :: queue_buf(:)
 
 
         sph_lnum = lnum
@@ -76,72 +73,73 @@ contains
                 mode_res = calculate_m(scattering_context, queue, m, lnum, sph_lnum)
             
                 call cpu_time(time_t4)
-                print*, rank, iter, "mode_res time", time_t4-time_t3
+                ! print*, rank, iter, "mode_res time", time_t4-time_t3
                 
-                ! convert "queue" into 3 one-dimensional arrays and pass them
-                sum_size = qlen
+                sum_size = 0
                 do i = 1, qlen
                     sum_size = sum_size + size(queue(i)%previous)
                 enddo
 
-                allocate(node_logic(2*qlen), node_int((2+4)*qlen), node_prev(sum_size))
-
-                node_logic = [(queue(i)%need_calc, i = 1, qlen), (queue(i)%to_res, i = 1, qlen)]
-                node_int = [integer::]
-                node_prev = [integer::]
-                do i = 1, qlen
-                    node_int = [node_int, queue(i)%info%basis, queue(i)%info%tmode, queue(i)%info%basis_type, queue(i)%info%num]
-                    node_int = [node_int, queue(i)%item%m, queue(i)%item%lnum]
-                    node_prev = [node_prev, size(queue(i)%previous), queue(i)%previous]
-                enddo
-
-
                 call MPI_Ssend(qlen, 1, MPI_INTEGER, 0, m, MPI_COMM_WORLD, Err)
                 call MPI_Barrier(MPI_COMM_WORLD, Err)
 
+                queue_buf_len = 4*2*qlen + 4*4*qlen + 4*2*qlen + 4*1*qlen + 4*sum_size
 
+                allocate(queue_buf(queue_buf_len))
+                position = 0
+                do i=1, qlen
+                    len_prev = size(queue(i)%previous)
+                    call MPI_Pack(queue(i)%need_calc, 1, MPI_LOGICAL, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(queue(i)%to_res, 1, MPI_LOGICAL, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(queue(i)%info%basis, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(queue(i)%info%tmode, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(queue(i)%info%basis_type, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(queue(i)%info%num, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(queue(i)%item%m, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(queue(i)%item%lnum, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(len_prev, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(queue(i)%previous, len_prev, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                enddo
 
-                call MPI_Ssend(node_logic, 2*qlen, MPI_LOGICAL, 0, m, MPI_COMM_WORLD, Err)
-                call MPI_Ssend(node_int, (2+4)*qlen, MPI_INTEGER, 0, m, MPI_COMM_WORLD, Err)
-                call MPI_Ssend(node_prev, sum_size, MPI_INTEGER, 0, m, MPI_COMM_WORLD, Err)
+                call MPI_Ssend(queue_buf, queue_buf_len, MPI_PACKED, 0, m, MPI_COMM_WORLD, Err)
 
-
-                deallocate(node_logic, node_int, node_prev, queue)
+                deallocate(queue_buf, queue)
 
                 
-                allocate(ij(qlen,2))
+                allocate(ij(2,qlen))
                 do i = 1, qlen
-                    ij(i,1) = size(mode_res(i)%tmatrix, dim = 1) ! number of rows = length of columns
-                    ij(i,2) = size(mode_res(i)%tmatrix, dim = 2) ! number of columns = length of rows
+                    ! ij(i,1) = size(mode_res(i)%tmatrix, dim = 1) ! number of rows = length of columns
+                    ! ij(i,2) = size(mode_res(i)%tmatrix, dim = 2) ! number of columns = length of rows
+                    ij(:,i) = shape(mode_res(i)%tmatrix)
                 enddo
 
-
-                s = sum(product(ij, dim=2)) ! number of elements in all matrices
-                sum_size2 = 0
+                s = sum(product(ij, dim=1)) ! number of elements in all matrices
+                sum_size = 0
                 do i = 1, qlen
-                    sum_size2 = sum_size2 + size(mode_res(i)%solution)
+                    sum_size = sum_size + size(mode_res(i)%solution)
                 enddo
 
-                allocate(MCR_real(2*qlen), MCR_comp_mat(s), MCR_comp_arr(sum_size2), MCR_ind(3*qlen))
-                MCR_real = [real(knd)::]
-                MCR_comp_mat = [complex(knd)::]
-                MCR_comp_arr = [complex(knd)::]
-                MCR_ind = [integer::]
+                queue_buf_len = knd*2*qlen + (2*knd)*s*qlen + (2*knd)*sum_size + 4*3*qlen
 
-                do i = 1, qlen
-                    MCR_real = [MCR_real, mode_res(i)%factors%Qext, mode_res(i)%factors%Qsca]
-                    MCR_comp_mat = [MCR_comp_mat, (mode_res(i)%tmatrix(:,j), j=1, ij(i,1))]
-                    MCR_comp_arr = [MCR_comp_arr, mode_res(i)%solution]
-                    MCR_ind = [MCR_ind, ij(i,:), size(mode_res(i)%solution)]
+                allocate(queue_buf(queue_buf_len))
+                position = 0
+                do i=1, qlen
+                    len_prev = size(mode_res(i)%solution)
+                    call MPI_Pack(mode_res(i)%factors%Qext, 1, MPI_REAL_knd, queue_buf, queue_buf_len, &
+                                    position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(mode_res(i)%factors%Qsca, 1, MPI_REAL_knd, queue_buf, queue_buf_len, &
+                                    position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(ij(:,i), 2, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(len_prev, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(pack(mode_res(i)%tmatrix, .true.), product(ij(:,i)), MPI_COMPLEX_knd, queue_buf, queue_buf_len, &
+                                    position, MPI_COMM_WORLD, Err)
+                    call MPI_Pack(mode_res(i)%solution, len_prev, MPI_COMPLEX_knd, queue_buf, queue_buf_len, &
+                                    position, MPI_COMM_WORLD, Err)
                 enddo
-            
-                call MPI_Ssend(MCR_real, 2*qlen, MPI_REAL_knd, 0, m, MPI_COMM_WORLD, Err)
-                call MPI_Ssend(MCR_comp_mat, s, MPI_COMPLEX_knd, 0, m, MPI_COMM_WORLD, Err)
-                call MPI_Ssend(MCR_comp_arr, sum_size2, MPI_COMPLEX_knd, 0, m, MPI_COMM_WORLD, Err)
-                call MPI_Ssend(MCR_ind, 3*qlen, MPI_INTEGER, 0, m, MPI_COMM_WORLD, Err)
 
-                deallocate(ij, MCR_real, MCR_comp_mat, MCR_comp_arr, MCR_ind, mode_res)
+                call MPI_Ssend(queue_buf, queue_buf_len, MPI_PACKED, 0, m, MPI_COMM_WORLD, Err)
 
+                deallocate(queue_buf, ij, mode_res)
             endif
 
             ! checking the achieved accuracy and exiting the outer loop
@@ -178,18 +176,16 @@ contains
         integer :: theta_bucket_size, theta_bucket_start, theta_bucket_end, current_size, current_end
 
         ! MPI variables
-        logical, allocatable :: node_logic(:)
         logical :: skip(Size_mpi-1)
         logical, intent(inout) :: accuracy_logic
-        integer, allocatable :: node_int(:), node_prev(:), ij(:,:), MCR_ind(:), qlen_m(:)
-        integer ::  sum_size, sum_size2, s, c, c1, k, m_array(Size_mpi-1), iter
-        real(knd), allocatable :: MCR_real(:)
+        integer, allocatable :: qlen_m(:), prevv(:)
+        integer :: k, m_array(Size_mpi-1), iter, m_array_all(minm:maxm), ij_2(2), position, len_prev, queue_buf_len
         complex(knd), allocatable :: MCR_comp_mat(:), MCR_comp_arr(:)
         type(Node), allocatable :: queue_m(:,:)
         type(ModeCalculationResult), allocatable :: mode_res_m(:,:)
-        integer :: m_array_all(minm:maxm)
 
         real(knd) :: time_t3, time_t4
+        character, allocatable :: queue_buf(:)
 
 
 
@@ -261,79 +257,66 @@ contains
                 m = Status%MPI_TAG
                 qlen = qlen_m(m)
 
-                ! get encrypted "queue"
-                allocate(node_logic(2*qlen))
-                call MPI_Recv(node_logic, 2*qlen, MPI_LOGICAL, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
+                call MPI_Get_count(Status, MPI_PACKED, queue_buf_len, Err)
 
-                allocate(node_int((2+4)*qlen))
-                call MPI_Recv(node_int, (2+4)*qlen, MPI_INTEGER, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
+                allocate(queue_buf(queue_buf_len))
+                call MPI_Recv(queue_buf, queue_buf_len, MPI_PACKED, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
 
-                call MPI_Probe(MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-                call MPI_Get_count(Status, MPI_INTEGER, sum_size, Err)
-
-                allocate(node_prev(sum_size))
-                call MPI_Recv(node_prev, sum_size, MPI_INTEGER, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-
-                ! decoding
-                c = 1; c1 = 0
                 allocate(queue(qlen))
-                do i = 1, qlen
-                    queue(i)%need_calc = node_logic(i)
-                    queue(i)%to_res = node_logic(i+qlen)
+                position = 0
+                do i=1, qlen
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%need_calc, 1, MPI_LOGICAL, MPI_COMM_WORLD, Err)
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%to_res, 1, MPI_LOGICAL, MPI_COMM_WORLD, Err)
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%info%basis, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%info%tmode, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%info%basis_type, 1, &
+                                    MPI_INTEGER, MPI_COMM_WORLD, Err)
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%info%num, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%item%m, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%item%lnum, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, len_prev, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
 
-                    queue(i)%info%basis = node_int(6*(i-1)+1)
-                    queue(i)%info%tmode = node_int(6*(i-1)+2)
-                    queue(i)%info%basis_type = node_int(6*(i-1)+3)
-                    queue(i)%info%num = node_int(6*(i-1)+4)
-
-                    queue(i)%item%m = node_int(6*(i-1)+5)
-                    queue(i)%item%lnum = node_int(6*(i-1)+6)
-
-                    c1 = node_prev(c)
-                    queue(i)%previous = node_prev(c+1:c+c1)
-                    c = c + c1 + 1
+                    allocate(prevv(len_prev))
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, prevv, len_prev, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                    queue(i)%previous = prevv
+                    deallocate(prevv)
                 enddo
-                
+
                 queue_m(:qlen,m) = queue
+                deallocate(queue_buf, queue)
 
-                deallocate(node_prev, node_logic, node_int, queue)
 
-
-                allocate(MCR_real(2*qlen))
-                call MPI_Recv(MCR_real, 2*qlen, MPI_REAL_knd, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-    
                 call MPI_Probe(MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-                call MPI_Get_count(Status, MPI_COMPLEX_knd, s, Err)
-                allocate(MCR_comp_mat(s))
-                call MPI_Recv(MCR_comp_mat, s, MPI_COMPLEX_knd, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-    
-                call MPI_Probe(MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-                call MPI_Get_count(Status, MPI_COMPLEX_knd, sum_size2, Err)
-                allocate(MCR_comp_arr(sum_size2))
-                call MPI_Recv(MCR_comp_arr, sum_size2, MPI_COMPLEX_knd, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
+                call MPI_Get_count(Status, MPI_PACKED, queue_buf_len, Err)
 
-                allocate(MCR_ind(3*qlen))
-                call MPI_Recv(MCR_ind, 3*qlen, MPI_INTEGER, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
+                allocate(queue_buf(queue_buf_len))
+                call MPI_Recv(queue_buf, queue_buf_len, MPI_PACKED, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err)
 
                 allocate(mode_res(qlen))
-                allocate(ij(qlen,2))
-                c1 = 0
-                do i = 1, qlen
-                    mode_res(i)%factors%Qext = MCR_real(2*i-1)
-                    mode_res(i)%factors%Qsca = MCR_real(2*i)
+                position = 0
+                do i=1, qlen
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, mode_res(i)%factors%Qext, 1, &
+                                    MPI_REAL_knd, MPI_COMM_WORLD, Err)
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, mode_res(i)%factors%Qsca, 1, &
+                                    MPI_REAL_knd, MPI_COMM_WORLD, Err)
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, ij_2, 2, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, len_prev, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
 
-                    ij(i,:) = MCR_ind(3*i-2:3*i-1)
-                    c = MCR_ind(3*i)
-
-                    mode_res(i)%solution = MCR_comp_arr(i*c-c+1:i*c)
-
-                    mode_res(i)%tmatrix = reshape(MCR_comp_mat(c1+1:c1+product(ij(i,:))), [ij(i,1), ij(i,2)])
-                    c1 = c1 + product(ij(i,:))
+                    allocate(MCR_comp_mat(product(ij_2)))
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, MCR_comp_mat, product(ij_2), &
+                                    MPI_COMPLEX_knd, MPI_COMM_WORLD, Err)
+                    mode_res(i)%tmatrix = reshape(MCR_comp_mat, ij_2)
+                    deallocate(MCR_comp_mat)
+                    
+                    allocate(MCR_comp_arr(len_prev))
+                    call MPI_Unpack(queue_buf, queue_buf_len, position, MCR_comp_arr, len_prev, &
+                                    MPI_COMPLEX_knd, MPI_COMM_WORLD, Err)
+                    mode_res(i)%solution = MCR_comp_arr
+                    deallocate(MCR_comp_arr)
                 enddo
 
                 mode_res_m(:qlen,m) = mode_res
-
-                deallocate(ij, MCR_real, MCR_comp_mat, MCR_comp_arr, MCR_ind, mode_res)
+                deallocate(queue_buf, mode_res)
 
             enddo
 
@@ -399,7 +382,7 @@ contains
             if (accuracy_logic) exit 
         enddo
     
-        print*, "real_maxm", real_maxm, rank
+        ! print*, "real_maxm", real_maxm, rank
 
         if (.not. need_indicatrix) then
             return
@@ -497,16 +480,15 @@ contains
         integer :: theta_bucket_size, theta_bucket_start, theta_bucket_end, current_size, current_end
 
         ! MPI variables
-        logical, allocatable :: node_logic(:)
         logical :: skip(Size_mpi-1), accuracy_logic
-        integer, allocatable :: node_int(:), node_prev(:), nodes_previous(:,:), ij(:,:), MCR_ind(:), qlen_m(:)
-        integer :: sum_size, sum_size2, k, s, c, c1, m_array(Size_mpi-1), iter
-        real(knd), allocatable :: MCR_real(:)
+        integer, allocatable :: ij(:,:), qlen_m(:), prevv(:)
+        integer :: sum_size, k, s, m_array(Size_mpi-1), iter, ij_2(2), position, len_prev, queue_buf_len
         complex(knd), allocatable :: MCR_comp_mat(:), MCR_comp_arr(:)
         type(Node), allocatable :: queue_m(:,:)
         type(ModeCalculationResult), allocatable :: mode_res_m(:,:)
 
         real(knd) :: time_t3, time_t4
+        character, allocatable :: queue_buf(:)
            
         call MPI_TYPE_MATCH_SIZE(MPI_TYPECLASS_REAL, knd, MPI_REAL_knd, Err)
         call MPI_TYPE_MATCH_SIZE(MPI_TYPECLASS_COMPLEX, 2*knd, MPI_COMPLEX_knd, Err)
@@ -583,76 +565,79 @@ contains
                     call log_node_queue(queue)
 
                     call cpu_time(time_t3)
-              
+    
                     mode_res = calculate_m(scattering_context, queue, m, lnum, sph_lnum)
+                
                     call cpu_time(time_t4)
-                    print*, rank, iter, "mode_res time", time_t4-time_t3
+                    ! print*, rank, iter, "mode_res time", time_t4-time_t3
                     
-                    ! convert "queue" into 3 one-dimensional arrays and pass them
-                    sum_size = qlen
+                    sum_size = 0
                     do i = 1, qlen
                         sum_size = sum_size + size(queue(i)%previous)
                     enddo
-
-                    allocate(node_logic(2*qlen), node_int((2+4)*qlen), node_prev(sum_size))
-
-
-
-                    node_logic = [(queue(i)%need_calc, i = 1, qlen), (queue(i)%to_res, i = 1, qlen)]
-                    node_int = [integer::]
-                    node_prev = [integer::]
-                    do i = 1, qlen
-                        node_int = [node_int, queue(i)%info%basis, queue(i)%info%tmode, queue(i)%info%basis_type, queue(i)%info%num]
-                        node_int = [node_int, queue(i)%item%m, queue(i)%item%lnum]
-                        node_prev = [node_prev, size(queue(i)%previous), queue(i)%previous]
-                    enddo
-
-
+    
                     call MPI_Ssend(qlen, 1, MPI_INTEGER, 0, m, MPI_COMM_WORLD, Err)
                     call MPI_Barrier(MPI_COMM_WORLD, Err)
-
-
-
-                    call MPI_Ssend(node_logic, 2*qlen, MPI_LOGICAL, 0, m, MPI_COMM_WORLD, Err)
-                    call MPI_Ssend(node_int, (2+4)*qlen, MPI_INTEGER, 0, m, MPI_COMM_WORLD, Err)
-                    call MPI_Ssend(node_prev, sum_size, MPI_INTEGER, 0, m, MPI_COMM_WORLD, Err)
-
-
-                    deallocate(node_logic, node_int, node_prev, queue)
-
+    
+                    queue_buf_len = 4*2*qlen + 4*4*qlen + 4*2*qlen + 4*1*qlen + 4*sum_size
+    
+                    allocate(queue_buf(queue_buf_len))
+                    position = 0
+                    do i=1, qlen
+                        len_prev = size(queue(i)%previous)
+                        call MPI_Pack(queue(i)%need_calc, 1, MPI_LOGICAL, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(queue(i)%to_res, 1, MPI_LOGICAL, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(queue(i)%info%basis, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(queue(i)%info%tmode, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(queue(i)%info%basis_type, 1, MPI_INTEGER, queue_buf, queue_buf_len, &
+                                        position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(queue(i)%info%num, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(queue(i)%item%m, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(queue(i)%item%lnum, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(len_prev, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(queue(i)%previous, len_prev, MPI_INTEGER, queue_buf, queue_buf_len, &
+                                        position, MPI_COMM_WORLD, Err)
+                    enddo
+    
+                    call MPI_Ssend(queue_buf, queue_buf_len, MPI_PACKED, 0, m, MPI_COMM_WORLD, Err)
+    
+                    deallocate(queue_buf, queue)
+    
                     
-                    allocate(ij(qlen,2))
+                    allocate(ij(2,qlen))
                     do i = 1, qlen
-                        ij(i,1) = size(mode_res(i)%tmatrix, dim = 1) ! number of rows = length of columns
-                        ij(i,2) = size(mode_res(i)%tmatrix, dim = 2) ! number of columns = length of rows
+                        ! ij(i,1) = size(mode_res(i)%tmatrix, dim = 1) ! number of rows = length of columns
+                        ! ij(i,2) = size(mode_res(i)%tmatrix, dim = 2) ! number of columns = length of rows
+                        ij(:,i) = shape(mode_res(i)%tmatrix)
                     enddo
-
-
-                    s = sum(product(ij, dim=2)) ! number of elements in all matrices
-                    sum_size2 = 0
+    
+                    s = sum(product(ij, dim=1)) ! number of elements in all matrices
+                    sum_size = 0
                     do i = 1, qlen
-                        sum_size2 = sum_size2 + size(mode_res(i)%solution)
+                        sum_size = sum_size + size(mode_res(i)%solution)
                     enddo
-
-                    allocate(MCR_real(2*qlen), MCR_comp_mat(s), MCR_comp_arr(sum_size2), MCR_ind(3*qlen))
-                    MCR_real = [real(knd)::]
-                    MCR_comp_mat = [complex(knd)::]
-                    MCR_comp_arr = [complex(knd)::]
-                    MCR_ind = [integer::]
-
-                    do i = 1, qlen
-                        MCR_real = [MCR_real, mode_res(i)%factors%Qext, mode_res(i)%factors%Qsca]
-                        MCR_comp_mat = [MCR_comp_mat, (mode_res(i)%tmatrix(:,j), j=1, ij(i,1))]
-                        MCR_comp_arr = [MCR_comp_arr, mode_res(i)%solution]
-                        MCR_ind = [MCR_ind, ij(i,:), size(mode_res(i)%solution)]
+    
+                    queue_buf_len = knd*2*qlen + (2*knd)*s*qlen + (2*knd)*sum_size + 4*3*qlen
+    
+                    allocate(queue_buf(queue_buf_len))
+                    position = 0
+                    do i=1, qlen
+                        len_prev = size(mode_res(i)%solution)
+                        call MPI_Pack(mode_res(i)%factors%Qext, 1, MPI_REAL_knd, queue_buf, queue_buf_len, &
+                                        position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(mode_res(i)%factors%Qsca, 1, MPI_REAL_knd, queue_buf, queue_buf_len, &
+                                        position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(ij(:,i), 2, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(len_prev, 1, MPI_INTEGER, queue_buf, queue_buf_len, position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(pack(mode_res(i)%tmatrix, .true.), product(ij(:,i)), MPI_COMPLEX_knd, queue_buf, &
+                                            queue_buf_len, position, MPI_COMM_WORLD, Err)
+                        call MPI_Pack(mode_res(i)%solution, len_prev, MPI_COMPLEX_knd, queue_buf, queue_buf_len, &
+                                        position, MPI_COMM_WORLD, Err)
                     enddo
-                
-                    call MPI_Ssend(MCR_real, 2*qlen, MPI_REAL_knd, 0, m, MPI_COMM_WORLD, Err)
-                    call MPI_Ssend(MCR_comp_mat, s, MPI_COMPLEX_knd, 0, m, MPI_COMM_WORLD, Err)
-                    call MPI_Ssend(MCR_comp_arr, sum_size2, MPI_COMPLEX_knd, 0, m, MPI_COMM_WORLD, Err)
-                    call MPI_Ssend(MCR_ind, 3*qlen, MPI_INTEGER, 0, m, MPI_COMM_WORLD, Err)
-
-                    deallocate(ij, MCR_real, MCR_comp_mat, MCR_comp_arr, MCR_ind, mode_res)
+    
+                    call MPI_Ssend(queue_buf, queue_buf_len, MPI_PACKED, 0, m, MPI_COMM_WORLD, Err)
+    
+                    deallocate(queue_buf, ij, mode_res)
 
                 endif
 
@@ -693,79 +678,68 @@ contains
                     m = Status%MPI_TAG
                     qlen = qlen_m(m)
 
-                    ! get encrypted "queue"
-                    allocate(node_logic(2*qlen))
-                    call MPI_Recv(node_logic, 2*qlen, MPI_LOGICAL, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
+                    call MPI_Get_count(Status, MPI_PACKED, queue_buf_len, Err)
 
-                    allocate(node_int((2+4)*qlen))
-                    call MPI_Recv(node_int, (2+4)*qlen, MPI_INTEGER, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
+                    allocate(queue_buf(queue_buf_len))
+                    call MPI_Recv(queue_buf, queue_buf_len, MPI_PACKED, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
 
-                    call MPI_Probe(MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-                    call MPI_Get_count(Status, MPI_INTEGER, sum_size, Err)
-
-                    allocate(node_prev(sum_size))
-                    call MPI_Recv(node_prev, sum_size, MPI_INTEGER, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-
-                    ! decoding
-                    c = 1; c1 = 0
                     allocate(queue(qlen))
-                    do i = 1, qlen
-                        queue(i)%need_calc = node_logic(i)
-                        queue(i)%to_res = node_logic(i+qlen)
+                    position = 0
+                    do i=1, qlen
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%need_calc, 1, MPI_LOGICAL, MPI_COMM_WORLD, Err)
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%to_res, 1, MPI_LOGICAL, MPI_COMM_WORLD, Err)
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%info%basis, 1, &
+                                        MPI_INTEGER, MPI_COMM_WORLD, Err)
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%info%tmode, 1, &
+                                        MPI_INTEGER, MPI_COMM_WORLD, Err)
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%info%basis_type, 1, &
+                                        MPI_INTEGER, MPI_COMM_WORLD, Err)
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%info%num, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%item%m, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, queue(i)%item%lnum, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, len_prev, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
 
-                        queue(i)%info%basis = node_int(6*(i-1)+1)
-                        queue(i)%info%tmode = node_int(6*(i-1)+2)
-                        queue(i)%info%basis_type = node_int(6*(i-1)+3)
-                        queue(i)%info%num = node_int(6*(i-1)+4)
-
-                        queue(i)%item%m = node_int(6*(i-1)+5)
-                        queue(i)%item%lnum = node_int(6*(i-1)+6)
-
-                        c1 = node_prev(c)
-                        queue(i)%previous = node_prev(c+1:c+c1)
-                        c = c + c1 + 1
+                        allocate(prevv(len_prev))
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, prevv, len_prev, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                        queue(i)%previous = prevv
+                        deallocate(prevv)
                     enddo
-                    
+
                     queue_m(:qlen,m) = queue
+                    deallocate(queue_buf, queue)
 
-                    deallocate(node_prev, node_logic, node_int, queue)
 
-
-                    allocate(MCR_real(2*qlen))
-                    call MPI_Recv(MCR_real, 2*qlen, MPI_REAL_knd, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-        
                     call MPI_Probe(MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-                    call MPI_Get_count(Status, MPI_COMPLEX_knd, s, Err)
-                    allocate(MCR_comp_mat(s))
-                    call MPI_Recv(MCR_comp_mat, s, MPI_COMPLEX_knd, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-        
-                    call MPI_Probe(MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
-                    call MPI_Get_count(Status, MPI_COMPLEX_knd, sum_size2, Err)
-                    allocate(MCR_comp_arr(sum_size2))
-                    call MPI_Recv(MCR_comp_arr, sum_size2, MPI_COMPLEX_knd, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
+                    call MPI_Get_count(Status, MPI_PACKED, queue_buf_len, Err)
 
-                    allocate(MCR_ind(3*qlen))
-                    call MPI_Recv(MCR_ind, 3*qlen, MPI_INTEGER, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err) 
+                    allocate(queue_buf(queue_buf_len))
+                    call MPI_Recv(queue_buf, queue_buf_len, MPI_PACKED, MPI_ANY_SOURCE, m, MPI_COMM_WORLD, Status, Err)
 
                     allocate(mode_res(qlen))
-                    allocate(ij(qlen,2))
-                    c1 = 0
-                    do i = 1, qlen
-                        mode_res(i)%factors%Qext = MCR_real(2*i-1)
-                        mode_res(i)%factors%Qsca = MCR_real(2*i)
+                    position = 0
+                    do i=1, qlen
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, mode_res(i)%factors%Qext, 1, &
+                                        MPI_REAL_knd, MPI_COMM_WORLD, Err)
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, mode_res(i)%factors%Qsca, 1, &
+                                        MPI_REAL_knd, MPI_COMM_WORLD, Err)
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, ij_2, 2, MPI_INTEGER, MPI_COMM_WORLD, Err)
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, len_prev, 1, MPI_INTEGER, MPI_COMM_WORLD, Err)
 
-                        ij(i,:) = MCR_ind(3*i-2:3*i-1)
-                        c = MCR_ind(3*i)
-
-                        mode_res(i)%solution = MCR_comp_arr(i*c-c+1:i*c)
-
-                        mode_res(i)%tmatrix = reshape(MCR_comp_mat(c1+1:c1+product(ij(i,:))), [ij(i,1), ij(i,2)])
-                        c1 = c1 + product(ij(i,:))
+                        allocate(MCR_comp_mat(product(ij_2)))
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, MCR_comp_mat, product(ij_2), &
+                                        MPI_COMPLEX_knd, MPI_COMM_WORLD, Err)
+                        mode_res(i)%tmatrix = reshape(MCR_comp_mat, ij_2)
+                        deallocate(MCR_comp_mat)
+                        
+                        allocate(MCR_comp_arr(len_prev))
+                        call MPI_Unpack(queue_buf, queue_buf_len, position, MCR_comp_arr, len_prev, &
+                                        MPI_COMPLEX_knd, MPI_COMM_WORLD, Err)
+                        mode_res(i)%solution = MCR_comp_arr
+                        deallocate(MCR_comp_arr)
                     enddo
 
                     mode_res_m(:qlen,m) = mode_res
-
-                    deallocate(ij, MCR_real, MCR_comp_mat, MCR_comp_arr, MCR_ind, mode_res)
+                    deallocate(queue_buf, mode_res)
 
                 enddo
 
@@ -836,7 +810,7 @@ contains
 
         if (Rank == 0) then 
 
-            print*, "real_maxm", real_maxm, rank
+            ! print*, "real_maxm", real_maxm, rank
 
             if (.not. need_indicatrix) then
                 return

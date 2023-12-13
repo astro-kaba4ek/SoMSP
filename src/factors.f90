@@ -28,6 +28,7 @@ program factors
     ! ! MPI variables
     ! logical :: accuracy_logic
     ! real(knd) :: time_t1, time_t2, time_t3, time_t4
+    character(3) :: str_rank
 
 
 
@@ -36,9 +37,10 @@ program factors
     call MPI_Comm_rank(MPI_COMM_WORLD, Rank, Err)
     call MPI_Comm_size(MPI_COMM_WORLD, Size_mpi, Err)
 
-    if (Rank == 0) then
+    write(str_rank, "(i3)") Rank
+    if (LOG_INFO) open(LOG_FD, FILE=trim(str_rank)//"n_"//trim(LOG_FILENAME), status='replace')
 
-        if (LOG_INFO) open(LOG_FD, FILE=LOG_FILENAME, status='replace')
+    if (Rank == 0) then
         input_file = 'input.txt'
         scatmatr_file = 'scattering_matrix.txt'
         do i = 1, command_argument_count(), 2
