@@ -52,6 +52,8 @@ contains
 
         if (this%state == 1) return
 
+        call cpu_time(start)
+
         this%m = m
         this%lnum = lnum
         this%k = k

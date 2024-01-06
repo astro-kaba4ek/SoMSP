@@ -3,9 +3,14 @@ project(Runnable VERSION 0.1.0)
 enable_language (Fortran)
 
 set(CMAKE_Fortran_COMPILER "/usr/bin/gfortran-11")
-set (CMAKE_Fortran_FLAGS_RELEASE "-Ofast -flto -fmax-stack-var-size=65536")
-set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fbounds-check -fmax-stack-var-size=65536")
-# set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fsanitize=address")
+# Ofast = O3 + ffast-math + fallow-store-data-races + {fstack-arrays | fmax-stack-var-size} + fno-protect-parens
+# not work: -fstack-arrays
+# works, but wrong: -fmax-stack-var-size=65536
+# works, but slows down: -fno-protect-parens
+set (CMAKE_Fortran_FLAGS_RELEASE "-O3 -ffast-math -fallow-store-data-races -flto -fopenmp")
+set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fbounds-check -fopenmp")
+# set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fsanitize=address -fopenmp")
+
 
 set(CMAKE_Fortran_MODULE_DIRECTORY "./modfiles")
 

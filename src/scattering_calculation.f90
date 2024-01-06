@@ -12,6 +12,9 @@ module scattering_calculation
     use spheroidal_indicatrix
     use calculation_models
     use logging
+
+    use omp_lib
+
     implicit none
 
     private
@@ -44,6 +47,10 @@ contains
         character(*), intent(in) :: scatmatr_file
 
         integer :: theta_bucket_size, theta_bucket_start, theta_bucket_end, current_size, current_end
+
+        ! openmp переменные
+        integer :: num_threads
+        integer, allocatable :: m_reached_accuracy(:)
 
         call res%initialize()
 
@@ -82,6 +89,18 @@ contains
         solution_tm = 0
         solution_te = 0
         if (LOG_INFO) write(LOG_FD,*) '{INFO} start calculation with model '//model
+
+        allocate(m_reached_accuracy(minm:maxm))
+        m_reached_accuracy = maxm
+
+        ! Calculates the total number of possible threads and takes 1 less.
+        !$omp parallel
+            num_threads = omp_get_num_threads()
+        !$omp end parallel
+        call omp_set_num_threads(num_threads-1)
+        
+
+        !$omp parallel do default(firstprivate) shared(res, m_reached_accuracy) schedule(static, 1) 
         do m = minm, maxm
             call typed_model%build_mode_queue(m, lnum, spherical_lnum, queue)
             if (LOG_INFO) write(LOG_FD,*) 
@@ -119,12 +138,21 @@ contains
 
             endif
 
+            ! You need to register "export OMP_CANCELLATION=true" in the terminal!
+            ! Interrupting the parallel region when accuracy is achieved. 
             if (size(queue) > 0 .and. accuracy < MIN_M_RATIO) then
-                real_maxm = m
-                exit
-            endif
+                m_reached_accuracy(m) = m
+                !$omp cancel do
+            end if
+            deallocate(queue, mode_res)
         end do
-        deallocate(queue, mode_res)
+
+        ! The interrupt does not work perfectly, 
+        ! so the true value of m is output, at which accuracy is achieved, 
+        ! or the maximum specified m.
+        real_maxm = minval(m_reached_accuracy)
+        write(*, "(' real_maxm = ',i5)") real_maxm
+        deallocate(m_reached_accuracy)
 
         if (.not. need_indicatrix) then
             return
