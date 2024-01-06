@@ -17,10 +17,20 @@ then compile with
 ```bash
 make main
 ```
-and run
+and run (basic version)
 ```bash
 ./main --input path_to_input_file [--scat-matr path_to_scattering_matrix_output]
 ```
+and run (OpenMP-version. Then the environment variable must be "true". Otherwise, stopping when accuracy is reached will not work)
+```bash
+export OMP_CANCELLATION=true
+./main --input path_to_input_file [--scat-matr path_to_scattering_matrix_output] [--threads number_of_threads_to_parallelize]
+```
+and run (MPI-version)
+```bash
+mpiexec --use-hwthread-cpus -n number_of_threads_to_parallelize ./main --input path_to_input_file [--scat-matr path_to_scattering_matrix_output]
+```
+
 
 ### Building options
 1. The spheroidal functions are calculated with quadrouple precision, but the general code for T-matrix solution can be configured to use double precision with -DUSE_DOUBLE_PRECISION=True. Otherwise 
@@ -34,6 +44,8 @@ cmake path_to_source_dir -DCMAKE_BUILD_TYPE=Release -DLOG=time;tmatrix
 ### Running options
 1. The program requires either as input file specified with --input or a file input.txt in the current directory.
 2. The output file for the scattering matrix can be specified with --scat-matr. If not specified, the matrix will be saved to scattering_matrix.txt.
+3. When using the OpenMP-version, the number of threads for parallelization can be specified with --threads. If not specified, k-1 threads are used, where k is the maximum number of threads in the system.
+4. When using the MPI-version, the number of threads (the total number of threads on all nodes of the cluster) for parallelization can be specified with -n. Other mpiexec flags can also be used if necessary.
 
 ### Input file format
 It is a simple text file where each line contains a certain scatterer or light parameter. It must contain enough numbers, after which the rest of the string is ignored.
