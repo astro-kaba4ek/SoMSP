@@ -49,7 +49,6 @@ contains
         integer :: theta_bucket_size, theta_bucket_start, theta_bucket_end, current_size, current_end
 
         ! openmp переменные
-        integer :: num_threads
         integer, allocatable :: m_reached_accuracy(:)
 
         call res%initialize()
@@ -93,11 +92,14 @@ contains
         allocate(m_reached_accuracy(minm:maxm))
         m_reached_accuracy = maxm
 
-        ! Calculates the total number of possible threads and takes 1 less.
+        ! If the number of threads is not specified,
+        ! calculates the total number of possible threads and takes 1 less.
+        if (.not. get_num_threads) then
         !$omp parallel
-            num_threads = omp_get_num_threads()
+            num_threads = omp_get_num_threads() - 1
         !$omp end parallel
-        call omp_set_num_threads(num_threads-1)
+        endif
+        call omp_set_num_threads(num_threads)
         
 
         !$omp parallel do default(firstprivate) shared(res, m_reached_accuracy) schedule(static, 1) 
@@ -138,7 +140,7 @@ contains
 
             endif
 
-            ! You need to register "export OMP_CANCELLATION=true" in the terminal!
+            ! YOU NEED TO WRITE "export OMP_CANCELLATION=true" IN THE TERMINAL!
             ! Interrupting the parallel region when accuracy is achieved. 
             if (size(queue) > 0 .and. accuracy < MIN_M_RATIO) then
                 m_reached_accuracy(m) = m

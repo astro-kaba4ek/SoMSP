@@ -5,6 +5,9 @@ module constants
 
     implicit none
 
+    integer :: num_threads
+    logical :: get_num_threads = .false.
+
     real(knd), parameter :: PI = 4.0_knd * atan(1.0_knd)
     real(knd), parameter :: BASE_ACCURACY = 1e-8_knd
     real(knd), parameter :: MIN_M_RATIO = 1e-8_knd

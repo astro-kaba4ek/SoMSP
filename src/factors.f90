@@ -17,7 +17,7 @@ program factors
     type(ScatteringContext) :: global_context
     type(SpheroidalShape) :: shape
     character(32) :: model
-    character(1024) :: input_file, scatmatr_file, arg
+    character(1024) :: input_file, scatmatr_file, number_of_threads, arg
     integer :: i,j,k
     logical :: need_far
 
@@ -31,6 +31,10 @@ program factors
             call get_command_argument(i + 1, input_file) 
         elseif (trim(arg) == '--scat-matr') then
             call get_command_argument(i + 1, scatmatr_file) 
+        elseif (trim(arg) == '--threads') then
+            call get_command_argument(i + 1, number_of_threads) 
+            read(number_of_threads,*) num_threads
+            get_num_threads = .true.
         else
             call assert(.false., 'unknown parameter '//trim(arg))
         endif
